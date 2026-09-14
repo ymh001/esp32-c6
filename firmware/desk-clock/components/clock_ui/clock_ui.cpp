@@ -436,16 +436,18 @@ static void update_energy_view(void)
     energy_snapshot_t snapshot = {};
     energy_service_get_snapshot(&snapshot);
     if (snapshot.loaded) {
-        lv_label_set_text_fmt(s_ui.energy_value_labels[0], "%.2f kWh",
-                              snapshot.today_kwh);
-        lv_label_set_text_fmt(s_ui.energy_value_labels[1], "%.2f kWh",
-                              snapshot.week_kwh);
-        lv_label_set_text_fmt(s_ui.energy_value_labels[3], "%.2f kWh",
-                              snapshot.remaining_kwh);
+        char text[32];
+        snprintf(text, sizeof(text), "%.2f kWh", snapshot.today_kwh);
+        lv_label_set_text(s_ui.energy_value_labels[0], text);
+        snprintf(text, sizeof(text), "%.2f kWh", snapshot.week_kwh);
+        lv_label_set_text(s_ui.energy_value_labels[1], text);
+        snprintf(text, sizeof(text), "%.2f kWh", snapshot.remaining_kwh);
+        lv_label_set_text(s_ui.energy_value_labels[3], text);
     }
     if (snapshot.month_loaded) {
-        lv_label_set_text_fmt(s_ui.energy_value_labels[2], "%.2f kWh",
-                              snapshot.month_kwh);
+        char text[32];
+        snprintf(text, sizeof(text), "%.2f kWh", snapshot.month_kwh);
+        lv_label_set_text(s_ui.energy_value_labels[2], text);
     } else if (snapshot.refreshing || snapshot.month_refreshing) {
         lv_label_set_text(s_ui.energy_value_labels[2], "--");
     }
@@ -556,10 +558,12 @@ static void brightness_changed(lv_event_t *event)
 {
     lv_obj_t *slider = lv_event_get_target_obj(event);
     const int value = lv_slider_get_value(slider);
+    char text[16];
     s_ui_settings.brightness = (uint8_t)value;
     s_ui_settings.night_brightness = (uint8_t)value;
     board_set_backlight((uint8_t)value);
-    lv_label_set_text_fmt(s_ui.brightness_value_label, "%d%%", value);
+    snprintf(text, sizeof(text), "%d%%", value);
+    lv_label_set_text(s_ui.brightness_value_label, text);
 }
 
 static void brightness_released(lv_event_t *event)
@@ -686,8 +690,9 @@ static void build_control_screen(void)
         make_label(s_ui.control_screen, "80%", s_cjk_title_font,
                    lv_color_white());
     lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 226);
-    lv_label_set_text_fmt(s_ui.brightness_value_label, "%u%%",
-                          s_ui_settings.brightness);
+    char text[16];
+    snprintf(text, sizeof(text), "%u%%", s_ui_settings.brightness);
+    lv_label_set_text(s_ui.brightness_value_label, text);
 }
 
 static void build_calendar_screen(void)
