@@ -7,6 +7,34 @@
 
 static i2c_master_dev_handle_t s_pmic;
 
+static uint8_t battery_percent_from_voltage(uint16_t voltage_mv)
+{
+    static const uint16_t voltages[] = {
+        3300, 3500, 3650, 3700, 3750, 3800, 3900, 4000, 4100, 4200,
+    };
+    static const uint8_t percents[] = {
+        0, 10, 20, 30, 40, 50, 70, 80, 90, 100,
+    };
+
+    if (voltage_mv <= voltages[0]) {
+        return 0;
+    }
+    for (size_t i = 1; i < sizeof(voltages) / sizeof(voltages[0]); ++i) {
+        if (voltage_mv <= voltages[i]) {
+            const uint16_t low_mv = voltages[i - 1];
+            const uint16_t high_mv = voltages[i];
+            const uint8_t low_percent = percents[i - 1];
+            const uint8_t high_percent = percents[i];
+            const uint32_t span = high_mv - low_mv;
+            return (uint8_t)(
+                low_percent +
+                (uint32_t)(voltage_mv - low_mv) *
+                    (high_percent - low_percent) / span);
+        }
+    }
+    return 100;
+}
+
 static esp_err_t axp_write(uint8_t reg, uint8_t value)
 {
     return board_i2c_write_reg(s_pmic, reg, &value, 1);
@@ -48,7 +76,8 @@ esp_err_t board_power_init(void)
     err |= axp_write(0x90, 0x0f);
     err |= axp_update(0x30, 0x01, 0x01);
     err |= axp_update(0x68, 0x01, 0x01);
-    err |= axp_write(0x64, 0x02);
+    // AXP2101 CV target: 3 = 4.2 V instead of 2 = 4.1 V.
+    err |= axp_write(0x64, 0x03);
     err |= axp_write(0x61, 0x02);
     err |= axp_write(0x62, 0x0a);
     err |= axp_write(0x63, 0x01);
@@ -75,12 +104,6 @@ esp_err_t board_power_get_battery(uint8_t *percent, uint16_t *voltage_mv)
         return ESP_ERR_NOT_FOUND;
     }
 
-    uint8_t raw_percent = 0;
-    err = board_i2c_read_reg(s_pmic, 0xA4, &raw_percent, 1);
-    if (err != ESP_OK) {
-        return err;
-    }
-
     uint8_t high = 0;
     uint8_t low = 0;
     esp_err_t voltage_err = board_i2c_read_reg(s_pmic, 0x34, &high, 1);
@@ -88,17 +111,16 @@ esp_err_t board_power_get_battery(uint8_t *percent, uint16_t *voltage_mv)
         voltage_err = board_i2c_read_reg(s_pmic, 0x35, &low, 1);
     }
 
+    const uint16_t voltage =
+        voltage_err == ESP_OK
+            ? (uint16_t)(((uint16_t)(high & 0x1F) << 8) | low)
+            : 0;
     if (percent != NULL) {
-        if (raw_percent <= 100) {
-            *percent = raw_percent;
-        } else {
-            *percent = 0;
-        }
+        *percent = voltage >= 3000 ? battery_percent_from_voltage(voltage)
+                                   : 0;
     }
     if (voltage_mv != NULL) {
-        *voltage_mv = voltage_err == ESP_OK
-                         ? (uint16_t)(((uint16_t)(high & 0x1F) << 8) | low)
-                         : 0;
+        *voltage_mv = voltage;
     }
     return ESP_OK;
 }
