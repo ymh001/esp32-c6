@@ -710,11 +710,12 @@ static void build_control_screen(void)
     lv_obj_t *brightness_label =
         make_label(s_ui.control_panel, "屏幕亮度", s_cjk_title_font,
                    lv_color_hex(0xD7DDE7));
-    lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 86);
+    lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 56);
 
     s_ui.brightness_slider = lv_slider_create(s_ui.control_panel);
     lv_obj_set_size(s_ui.brightness_slider, 320, 18);
-    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 144);
+    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 104);
+    lv_obj_clear_flag(s_ui.brightness_slider, LV_OBJ_FLAG_CLICK_FOCUSABLE);
     lv_slider_set_range(s_ui.brightness_slider, 10, 100);
     lv_slider_set_value(s_ui.brightness_slider, s_ui_settings.brightness,
                         LV_ANIM_OFF);
@@ -724,6 +725,13 @@ static void build_control_screen(void)
                               lv_color_hex(0xF3A712), LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(s_ui.brightness_slider,
                               lv_color_hex(0xF3A712), LV_PART_KNOB);
+    lv_obj_set_style_outline_width(s_ui.brightness_slider, 0, 0);
+    lv_obj_set_style_outline_width(s_ui.brightness_slider, 0,
+                                   LV_STATE_FOCUSED);
+    lv_obj_set_style_border_width(s_ui.brightness_slider, 0, 0);
+    lv_obj_set_style_border_width(s_ui.brightness_slider, 0, LV_PART_KNOB);
+    lv_obj_set_style_shadow_width(s_ui.brightness_slider, 0, 0);
+    lv_obj_set_style_shadow_width(s_ui.brightness_slider, 0, LV_PART_KNOB);
     lv_obj_add_event_cb(s_ui.brightness_slider, brightness_changed,
                         LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(s_ui.brightness_slider, brightness_released,
@@ -732,7 +740,7 @@ static void build_control_screen(void)
     s_ui.brightness_value_label =
         make_label(s_ui.control_panel, "80%", s_cjk_title_font,
                    lv_color_white());
-    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 188);
+    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 136);
     char text[16];
     snprintf(text, sizeof(text), "%u%%", s_ui_settings.brightness);
     lv_label_set_text(s_ui.brightness_value_label, text);
