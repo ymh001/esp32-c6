@@ -608,10 +608,51 @@ static void brightness_changed(lv_event_t *event)
     lv_label_set_text(s_ui.brightness_value_label, text);
 }
 
-static void brightness_released(lv_event_t *event)
+static void update_brightness_from_pointer(lv_event_t *event)
 {
-    (void)event;
-    clock_settings_save(&s_ui_settings);
+    lv_indev_t *indev = lv_event_get_indev(event);
+    if (indev == NULL || s_ui.brightness_slider == NULL) {
+        return;
+    }
+
+    lv_point_t point;
+    lv_indev_get_point(indev, &point);
+
+    lv_area_t slider_area;
+    lv_obj_get_coords(s_ui.brightness_slider, &slider_area);
+    const int32_t width = lv_area_get_width(&slider_area);
+    if (width <= 0) {
+        return;
+    }
+
+    int32_t position = point.x - slider_area.x1;
+    if (position < 0) {
+        position = 0;
+    } else if (position > width) {
+        position = width;
+    }
+
+    const int minimum = lv_slider_get_min_value(s_ui.brightness_slider);
+    const int maximum = lv_slider_get_max_value(s_ui.brightness_slider);
+    const int value =
+        minimum + (int)((int64_t)(maximum - minimum) * position / width);
+    if (value != lv_slider_get_value(s_ui.brightness_slider)) {
+        lv_slider_set_value(s_ui.brightness_slider, value, LV_ANIM_OFF);
+    }
+}
+
+static void brightness_touch_event(lv_event_t *event)
+{
+    const lv_event_code_t code = lv_event_get_code(event);
+    if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING ||
+        code == LV_EVENT_RELEASED) {
+        update_brightness_from_pointer(event);
+    }
+    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
+        ESP_LOGI(TAG, "Brightness: %d%%",
+                 lv_slider_get_value(s_ui.brightness_slider));
+        clock_settings_save(&s_ui_settings);
+    }
 }
 
 static void build_energy_screen(void)
@@ -711,26 +752,38 @@ static void build_control_screen(void)
     lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 86);
 
     s_ui.brightness_slider = lv_slider_create(s_ui.control_panel);
-    lv_obj_set_size(s_ui.brightness_slider, 320, 18);
-    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 144);
+    lv_obj_set_size(s_ui.brightness_slider, 360, 40);
+    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 138);
+    lv_obj_set_ext_click_area(s_ui.brightness_slider, 12);
     lv_slider_set_range(s_ui.brightness_slider, 10, 100);
     lv_slider_set_value(s_ui.brightness_slider, s_ui_settings.brightness,
                         LV_ANIM_OFF);
     lv_obj_set_style_bg_color(s_ui.brightness_slider,
-                              lv_color_hex(0x252C37), LV_PART_MAIN);
+                              lv_color_hex(0x3A4352), LV_PART_MAIN);
+    lv_obj_set_style_radius(s_ui.brightness_slider, LV_RADIUS_CIRCLE,
+                            LV_PART_MAIN);
+    lv_obj_set_style_border_width(s_ui.brightness_slider, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_color(s_ui.brightness_slider,
                               lv_color_hex(0xF3A712), LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(s_ui.brightness_slider,
-                              lv_color_hex(0xF3A712), LV_PART_KNOB);
+    lv_obj_set_style_radius(s_ui.brightness_slider, LV_RADIUS_CIRCLE,
+                            LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(s_ui.brightness_slider, LV_OPA_TRANSP,
+                            LV_PART_KNOB);
     lv_obj_add_event_cb(s_ui.brightness_slider, brightness_changed,
                         LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_released,
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
+                        LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
+                        LV_EVENT_PRESSING, NULL);
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
                         LV_EVENT_RELEASED, NULL);
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
+                        LV_EVENT_PRESS_LOST, NULL);
 
     s_ui.brightness_value_label =
         make_label(s_ui.control_panel, "80%", s_cjk_title_font,
                    lv_color_white());
-    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 188);
+    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 200);
     char text[16];
     snprintf(text, sizeof(text), "%u%%", s_ui_settings.brightness);
     lv_label_set_text(s_ui.brightness_value_label, text);

@@ -8,6 +8,8 @@
 - Added three-hour background refresh and a manual refresh button.
 - Added a control page with a brightness slider, opened by a downward swipe or
   the electricity page's gear button.
+- Reworked the brightness control as a thick pill track that jumps to the
+  touched position and accepts horizontal dragging from anywhere on the track.
 - Added a slide/fade transition for the control panel and device battery
   percentage from the AXP2101.
 - Replaced the calendar/clock tap targets with left/right swipe navigation and
