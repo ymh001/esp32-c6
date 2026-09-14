@@ -1,0 +1,21 @@
+idf_component_register(
+    SRCS
+        "clock_ui.cpp"
+        "fonts/clock_cjk_16.c"
+        "fonts/clock_cjk_24.c"
+        "fonts/clock_cjk_32.c"
+        "fonts/clock_dot_24.c"
+        "fonts/clock_dot_32.c"
+        "fonts/clock_dot_48.c"
+        "fonts/clock_dot_96.c"
+    INCLUDE_DIRS "include"
+    REQUIRES
+        board
+        settings
+        net_config
+        time_service
+        lunar
+    PRIV_REQUIRES
+        lvgl__lvgl
+        espressif__esp_lvgl_adapter
+)
