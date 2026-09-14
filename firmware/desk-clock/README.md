@@ -14,6 +14,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 - PCF85063 startup time and SNTP synchronization.
 - Compile-time Wi-Fi credentials with automatic reconnect and SNTP startup
   after the network is available.
+- Electricity page with today, current week, current month, and remaining kWh.
+- Automatic electricity refresh every three hours plus a manual refresh.
 - NVS persistence for local clock preferences.
 - Automatic day and night brightness.
 - Two-pixel QSPI redraw alignment to prevent sheared or slanted partial updates.
@@ -23,10 +25,15 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 
 ## Controls
 
-- Tap the clock to open the calendar.
-- Tap the `时钟` button in the calendar to return.
+- Swipe left or right anywhere on the screen to cycle through the clock,
+  calendar, and electricity pages.
 - Use `<` and `>` to change months.
-- Press KEY (GPIO10) to toggle between clock and calendar.
+- Swipe down from any main page to open the control screen, or use the gear
+  button on the electricity page.
+- Adjust screen brightness with the slider. Swipe up or use the close button to
+  return.
+- Press KEY (GPIO10) as an optional hardware shortcut to toggle between the
+  main pages.
 
 ## Wi-Fi Configuration
 
@@ -77,8 +84,19 @@ and retry.
 | `components/time_service/` | Time zone, RTC restore, and SNTP |
 | `components/lunar/` | Lunar conversion, solar terms, and festivals |
 | `components/wifi_manager/` | Hardcoded Wi-Fi credentials and station reconnection |
+| `components/energy_service/` | Electricity API client and cached usage data |
 | `components/clock_ui/` | LVGL clock and calendar UI |
 | `host_tests/` | Host-side calendar tests |
+
+The clock UI uses generated CJK font subsets. After adding any new Chinese
+text, run:
+
+```bash
+bash tools/generate_clock_fonts.sh
+```
+
+The script scans the firmware sources and regenerates all three font files, so
+missing-glyph boxes cannot reappear after a UI text change.
 
 ## Pending Hardware Verification
 

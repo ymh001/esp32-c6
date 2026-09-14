@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Added an electricity page with today, week, month, and remaining kWh.
+- Added three-hour background refresh and a manual refresh button.
+- Added a control page with a brightness slider, opened by a downward swipe or
+  the electricity page's gear button.
+- Replaced the calendar/clock tap targets with left/right swipe navigation and
+  cyclic switching across the three main pages.
 - Replaced the setup portal and editable Wi-Fi settings with a station-only
   Wi-Fi manager using compile-time credentials.
 - Centralized the SSID and password in `wifi_credentials.h`.
@@ -14,6 +20,15 @@
 
 - SoftAP setup hotspot, HTTP configuration server, captive-portal DNS, Wi-Fi
   scanning, NVS Wi-Fi storage, and the BOOT-button configuration entry point.
+
+### Fixed
+
+- Removed full-screen slide animations that overloaded the LVGL render task
+  and triggered the task watchdog on rapid swipes.
+- Rebuilt calendar cells without retaining stale objects from the previous
+  month.
+- Replaced the partial CJK font subset with source-generated fonts covering all
+  current UI and lunar text, eliminating missing-glyph boxes.
 
 ## 2026-09-14
 

@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include "board.h"
+#include "energy_service.h"
 #include "esp_check.h"
 #include "esp_lv_adapter.h"
 #include "esp_log.h"
@@ -15,6 +16,8 @@
 
 static const char *TAG = "clock_ui";
 
+#define CALENDAR_FIXED_CHILD_COUNT 3
+
 LV_FONT_DECLARE(clock_cjk_16);
 LV_FONT_DECLARE(clock_cjk_24);
 LV_FONT_DECLARE(clock_cjk_32);
@@ -23,9 +26,18 @@ LV_FONT_DECLARE(clock_dot_32);
 LV_FONT_DECLARE(clock_dot_48);
 LV_FONT_DECLARE(clock_dot_96);
 
+typedef enum {
+    MAIN_PAGE_CLOCK = 0,
+    MAIN_PAGE_CALENDAR,
+    MAIN_PAGE_ENERGY,
+    MAIN_PAGE_COUNT,
+} main_page_t;
+
 typedef struct {
     lv_obj_t *clock_screen;
     lv_obj_t *calendar_screen;
+    lv_obj_t *energy_screen;
+    lv_obj_t *control_screen;
     lv_obj_t *time_label;
     lv_obj_t *seconds_label;
     lv_obj_t *date_label;
@@ -36,6 +48,12 @@ typedef struct {
     lv_obj_t *week_name_labels[7];
     lv_obj_t *week_day_labels[7];
     lv_obj_t *week_lunar_labels[7];
+    lv_obj_t *energy_value_labels[4];
+    lv_obj_t *energy_status_label;
+    lv_obj_t *brightness_slider;
+    lv_obj_t *brightness_value_label;
+    main_page_t current_page;
+    main_page_t previous_page;
     int displayed_year;
     int displayed_month;
     int applied_brightness;
@@ -50,6 +68,7 @@ static clock_settings_t s_ui_settings;
 static const lv_font_t *s_cjk_font = &clock_cjk_16;
 static const lv_font_t *s_cjk_title_font = &clock_cjk_24;
 static const lv_font_t *s_cjk_date_font = &clock_cjk_32;
+static uint32_t s_last_view_switch_tick;
 
 void clock_ui_render_calendar(int year, int month);
 
@@ -100,28 +119,81 @@ static lv_obj_t *make_label(lv_obj_t *parent, const char *text,
     return label;
 }
 
-static void show_clock_screen(void)
+static void show_main_page(main_page_t page)
 {
-    lv_screen_load_anim(s_ui.clock_screen, LV_SCREEN_LOAD_ANIM_FADE_IN, 180, 0,
-                        false);
+    s_ui.current_page = page;
+    if (page == MAIN_PAGE_CLOCK) {
+        lv_screen_load(s_ui.clock_screen);
+    } else if (page == MAIN_PAGE_CALENDAR) {
+        time_t now = time(NULL);
+        struct tm local = {0};
+        localtime_r(&now, &local);
+        s_ui.displayed_year = local.tm_year + 1900;
+        s_ui.displayed_month = local.tm_mon + 1;
+        clock_ui_render_calendar(s_ui.displayed_year, s_ui.displayed_month);
+        lv_screen_load(s_ui.calendar_screen);
+    } else {
+        lv_screen_load(s_ui.energy_screen);
+    }
 }
 
-static void show_calendar_screen(void)
+static void switch_main_page(int delta)
 {
-    time_t now = time(NULL);
-    struct tm local = {0};
-    localtime_r(&now, &local);
-    s_ui.displayed_year = local.tm_year + 1900;
-    s_ui.displayed_month = local.tm_mon + 1;
-    clock_ui_render_calendar(s_ui.displayed_year, s_ui.displayed_month);
-    lv_screen_load_anim(s_ui.calendar_screen, LV_SCREEN_LOAD_ANIM_FADE_IN, 180,
-                        0, false);
+    int page = (int)s_ui.current_page + delta;
+    while (page < 0) {
+        page += MAIN_PAGE_COUNT;
+    }
+    while (page >= MAIN_PAGE_COUNT) {
+        page -= MAIN_PAGE_COUNT;
+    }
+    show_main_page((main_page_t)page);
 }
 
-static void clock_clicked(lv_event_t *event)
+static void show_control_screen(void)
 {
-    (void)event;
-    show_calendar_screen();
+    if (lv_screen_active() != s_ui.control_screen) {
+        s_ui.previous_page = s_ui.current_page;
+    }
+    lv_screen_load(s_ui.control_screen);
+}
+
+static void close_control_screen(void)
+{
+    lv_screen_load(s_ui.previous_page == MAIN_PAGE_CALENDAR
+                       ? s_ui.calendar_screen
+                       : s_ui.previous_page == MAIN_PAGE_ENERGY
+                             ? s_ui.energy_screen
+                             : s_ui.clock_screen);
+    s_ui.current_page = s_ui.previous_page;
+}
+
+static void screen_gesture_cb(lv_event_t *event)
+{
+    lv_indev_t *indev = lv_event_get_indev(event);
+    if (indev == NULL) {
+        return;
+    }
+    const lv_dir_t direction = lv_indev_get_gesture_dir(indev);
+    if (lv_screen_active() == s_ui.control_screen) {
+        if (direction == LV_DIR_TOP) {
+            close_control_screen();
+        }
+        return;
+    }
+    if (direction == LV_DIR_BOTTOM) {
+        show_control_screen();
+        return;
+    }
+    if (direction != LV_DIR_LEFT && direction != LV_DIR_RIGHT) {
+        return;
+    }
+    if (s_last_view_switch_tick != 0 &&
+        lv_tick_elaps(s_last_view_switch_tick) < 300) {
+        return;
+    }
+    s_last_view_switch_tick = lv_tick_get();
+
+    switch_main_page(direction == LV_DIR_LEFT ? 1 : -1);
 }
 
 static void month_button_clicked(lv_event_t *event)
@@ -130,12 +202,6 @@ static void month_button_clicked(lv_event_t *event)
     s_ui.displayed_month += (int)delta;
     normalize_month(&s_ui.displayed_year, &s_ui.displayed_month);
     clock_ui_render_calendar(s_ui.displayed_year, s_ui.displayed_month);
-}
-
-static void back_to_clock_clicked(lv_event_t *event)
-{
-    (void)event;
-    show_clock_screen();
 }
 
 static void update_week_strip(const struct tm *local)
@@ -200,7 +266,8 @@ static void render_calendar(int year, int month)
     snprintf(title, sizeof(title), "%d年%d月", year, month);
     lv_label_set_text(s_ui.month_label, title);
 
-    while (lv_obj_get_child_count(s_ui.calendar_screen) > 17) {
+    while (lv_obj_get_child_count(s_ui.calendar_screen) >
+           CALENDAR_FIXED_CHILD_COUNT) {
         lv_obj_t *child = lv_obj_get_child(s_ui.calendar_screen, -1);
         lv_obj_delete(child);
     }
@@ -360,10 +427,41 @@ static void update_clock(void)
     }
 }
 
+static void update_energy_view(void)
+{
+    if (s_ui.energy_value_labels[0] == NULL) {
+        return;
+    }
+
+    energy_snapshot_t snapshot = {};
+    energy_service_get_snapshot(&snapshot);
+    if (snapshot.loaded) {
+        lv_label_set_text_fmt(s_ui.energy_value_labels[0], "%.2f kWh",
+                              snapshot.today_kwh);
+        lv_label_set_text_fmt(s_ui.energy_value_labels[1], "%.2f kWh",
+                              snapshot.week_kwh);
+        lv_label_set_text_fmt(s_ui.energy_value_labels[3], "%.2f kWh",
+                              snapshot.remaining_kwh);
+    }
+    if (snapshot.month_loaded) {
+        lv_label_set_text_fmt(s_ui.energy_value_labels[2], "%.2f kWh",
+                              snapshot.month_kwh);
+    } else if (snapshot.refreshing) {
+        lv_label_set_text(s_ui.energy_value_labels[2], "--");
+    }
+
+    lv_label_set_text(s_ui.energy_status_label,
+                      snapshot.refreshing
+                          ? "正在更新"
+                          : snapshot.message[0] != '\0' ? snapshot.message
+                                                        : "等待更新");
+}
+
 static void clock_timer(lv_timer_t *timer)
 {
     (void)timer;
     update_clock();
+    update_energy_view();
 }
 
 static void build_clock_screen(void)
@@ -373,7 +471,8 @@ static void build_clock_screen(void)
     lv_obj_set_style_bg_opa(s_ui.clock_screen, LV_OPA_COVER, 0);
     lv_obj_clear_flag(s_ui.clock_screen, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(s_ui.clock_screen, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_event_cb(s_ui.clock_screen, clock_clicked, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_ui.clock_screen, screen_gesture_cb, LV_EVENT_GESTURE,
+                        NULL);
 
     s_ui.time_label =
         make_label(s_ui.clock_screen, "00:00", &clock_dot_96,
@@ -435,16 +534,175 @@ static void build_clock_screen(void)
     }
 }
 
+static void refresh_button_clicked(lv_event_t *event)
+{
+    (void)event;
+    energy_service_request_refresh();
+}
+
+static void control_button_clicked(lv_event_t *event)
+{
+    (void)event;
+    show_control_screen();
+}
+
+static void close_control_clicked(lv_event_t *event)
+{
+    (void)event;
+    close_control_screen();
+}
+
+static void brightness_changed(lv_event_t *event)
+{
+    lv_obj_t *slider = lv_event_get_target_obj(event);
+    const int value = lv_slider_get_value(slider);
+    s_ui_settings.brightness = (uint8_t)value;
+    s_ui_settings.night_brightness = (uint8_t)value;
+    board_set_backlight((uint8_t)value);
+    lv_label_set_text_fmt(s_ui.brightness_value_label, "%d%%", value);
+}
+
+static void brightness_released(lv_event_t *event)
+{
+    (void)event;
+    clock_settings_save(&s_ui_settings);
+}
+
+static void build_energy_screen(void)
+{
+    s_ui.energy_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(s_ui.energy_screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(s_ui.energy_screen, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(s_ui.energy_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(s_ui.energy_screen, screen_gesture_cb, LV_EVENT_GESTURE,
+                        NULL);
+
+    lv_obj_t *title =
+        make_label(s_ui.energy_screen, "用电情况", s_cjk_title_font,
+                   lv_color_white());
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+
+    lv_obj_t *refresh = lv_button_create(s_ui.energy_screen);
+    lv_obj_set_size(refresh, 60, 36);
+    lv_obj_set_pos(refresh, 18, 16);
+    lv_obj_clear_flag(refresh, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(refresh, lv_color_hex(0x1A2029), 0);
+    lv_obj_add_event_cb(refresh, refresh_button_clicked, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *refresh_label =
+        make_label(refresh, "刷新", s_cjk_font, lv_color_white());
+    lv_obj_center(refresh_label);
+
+    lv_obj_t *control = lv_button_create(s_ui.energy_screen);
+    lv_obj_set_size(control, 60, 36);
+    lv_obj_set_pos(control, 402, 16);
+    lv_obj_clear_flag(control, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(control, lv_color_hex(0x1A2029), 0);
+    lv_obj_add_event_cb(control, control_button_clicked, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *control_label =
+        make_label(control, "控制", s_cjk_font, lv_color_white());
+    lv_obj_center(control_label);
+
+    static const char *titles[] = {"当日用电", "本周用电", "本月用电",
+                                   "剩余电量"};
+    const int positions[][2] = {
+        {18, 68},
+        {246, 68},
+        {18, 226},
+        {246, 226},
+    };
+    for (int i = 0; i < 4; ++i) {
+        lv_obj_t *card = lv_obj_create(s_ui.energy_screen);
+        lv_obj_set_size(card, 216, 136);
+        lv_obj_set_pos(card, positions[i][0], positions[i][1]);
+        lv_obj_clear_flag(card, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_set_style_radius(card, 8, 0);
+        lv_obj_set_style_bg_color(card, lv_color_hex(0x10141B), 0);
+        lv_obj_set_style_border_width(card, 1, 0);
+        lv_obj_set_style_border_color(card, lv_color_hex(0x252C37), 0);
+        lv_obj_set_style_pad_all(card, 0, 0);
+
+        lv_obj_t *label =
+            make_label(card, titles[i], s_cjk_font, lv_color_hex(0x8E98A8));
+        lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 14);
+
+        s_ui.energy_value_labels[i] =
+            make_label(card, "-- kWh", &clock_dot_32, lv_color_white());
+        lv_obj_align(s_ui.energy_value_labels[i], LV_ALIGN_CENTER, 0, 8);
+    }
+
+    s_ui.energy_status_label =
+        make_label(s_ui.energy_screen, "等待更新", s_cjk_font,
+                   lv_color_hex(0x778293));
+    lv_obj_align(s_ui.energy_status_label, LV_ALIGN_BOTTOM_MID, 0, -24);
+}
+
+static void build_control_screen(void)
+{
+    s_ui.control_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(s_ui.control_screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(s_ui.control_screen, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(s_ui.control_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(s_ui.control_screen, screen_gesture_cb,
+                        LV_EVENT_GESTURE, NULL);
+
+    lv_obj_t *title =
+        make_label(s_ui.control_screen, "控制", s_cjk_title_font,
+                   lv_color_white());
+    lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
+
+    lv_obj_t *close = lv_button_create(s_ui.control_screen);
+    lv_obj_set_size(close, 60, 36);
+    lv_obj_set_pos(close, 402, 16);
+    lv_obj_clear_flag(close, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(close, lv_color_hex(0x1A2029), 0);
+    lv_obj_add_event_cb(close, close_control_clicked, LV_EVENT_CLICKED, NULL);
+    lv_obj_t *close_label =
+        make_label(close, "关闭", s_cjk_font, lv_color_white());
+    lv_obj_center(close_label);
+
+    lv_obj_t *brightness_label =
+        make_label(s_ui.control_screen, "屏幕亮度", s_cjk_title_font,
+                   lv_color_hex(0xD7DDE7));
+    lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 126);
+
+    s_ui.brightness_slider = lv_slider_create(s_ui.control_screen);
+    lv_obj_set_size(s_ui.brightness_slider, 320, 18);
+    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 184);
+    lv_slider_set_range(s_ui.brightness_slider, 10, 100);
+    lv_slider_set_value(s_ui.brightness_slider, s_ui_settings.brightness,
+                        LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(s_ui.brightness_slider,
+                              lv_color_hex(0x252C37), LV_PART_MAIN);
+    lv_obj_set_style_bg_color(s_ui.brightness_slider,
+                              lv_color_hex(0xF3A712), LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(s_ui.brightness_slider,
+                              lv_color_hex(0xF3A712), LV_PART_KNOB);
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_changed,
+                        LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_released,
+                        LV_EVENT_RELEASED, NULL);
+
+    s_ui.brightness_value_label =
+        make_label(s_ui.control_screen, "80%", &clock_dot_32,
+                   lv_color_white());
+    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 226);
+    lv_label_set_text_fmt(s_ui.brightness_value_label, "%u%%",
+                          s_ui_settings.brightness);
+}
+
 static void build_calendar_screen(void)
 {
     s_ui.calendar_screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(s_ui.calendar_screen, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(s_ui.calendar_screen, LV_OPA_COVER, 0);
     lv_obj_clear_flag(s_ui.calendar_screen, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(s_ui.calendar_screen, screen_gesture_cb,
+                        LV_EVENT_GESTURE, NULL);
 
     lv_obj_t *previous = lv_button_create(s_ui.calendar_screen);
     lv_obj_set_size(previous, 48, 36);
     lv_obj_set_pos(previous, 18, 16);
+    lv_obj_clear_flag(previous, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(previous, lv_color_hex(0x1A2029), 0);
     lv_obj_add_event_cb(previous, month_button_clicked, LV_EVENT_CLICKED,
                         (void *)(intptr_t)-1);
@@ -460,6 +718,7 @@ static void build_calendar_screen(void)
     lv_obj_t *next = lv_button_create(s_ui.calendar_screen);
     lv_obj_set_size(next, 48, 36);
     lv_obj_set_pos(next, 414, 16);
+    lv_obj_clear_flag(next, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_bg_color(next, lv_color_hex(0x1A2029), 0);
     lv_obj_add_event_cb(next, month_button_clicked, LV_EVENT_CLICKED,
                         (void *)(intptr_t)1);
@@ -467,14 +726,6 @@ static void build_calendar_screen(void)
         make_label(next, ">", s_cjk_title_font, lv_color_white());
     lv_obj_center(next_label);
 
-    lv_obj_t *back = lv_button_create(s_ui.calendar_screen);
-    lv_obj_set_size(back, 74, 32);
-    lv_obj_set_pos(back, 203, 443);
-    lv_obj_set_style_bg_color(back, lv_color_hex(0x1A2029), 0);
-    lv_obj_add_event_cb(back, back_to_clock_clicked, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *back_label =
-        make_label(back, "时钟", s_cjk_font, lv_color_white());
-    lv_obj_center(back_label);
 }
 
 void clock_ui_render_calendar(int year, int month)
@@ -514,8 +765,12 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
     if (display->touch != NULL) {
         esp_lv_adapter_touch_config_t touch_config =
             ESP_LV_ADAPTER_TOUCH_DEFAULT_CONFIG(s_lv_display, display->touch);
-        if (esp_lv_adapter_register_touch(&touch_config) == NULL) {
+        lv_indev_t *touch = esp_lv_adapter_register_touch(&touch_config);
+        if (touch == NULL) {
             ESP_LOGW(TAG, "Touch registration failed");
+        } else {
+            lv_indev_set_gesture_min_distance(touch, 36);
+            lv_indev_set_gesture_min_velocity(touch, 4);
         }
     }
     ESP_RETURN_ON_ERROR(esp_lv_adapter_start(), TAG, "LVGL adapter start");
@@ -523,7 +778,9 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
     if (esp_lv_adapter_lock(-1) == ESP_OK) {
         build_clock_screen();
         build_calendar_screen();
-        lv_screen_load(s_ui.clock_screen);
+        build_energy_screen();
+        build_control_screen();
+        show_main_page(MAIN_PAGE_CLOCK);
         update_clock();
         lv_timer_create(clock_timer, 1000, NULL);
         esp_lv_adapter_unlock();
@@ -538,10 +795,10 @@ void clock_ui_toggle_view(void)
     if (esp_lv_adapter_lock(100) != ESP_OK) {
         return;
     }
-    if (lv_screen_active() == s_ui.clock_screen) {
-        show_calendar_screen();
+    if (lv_screen_active() == s_ui.control_screen) {
+        close_control_screen();
     } else {
-        show_clock_screen();
+        switch_main_page(1);
     }
     esp_lv_adapter_unlock();
 }
@@ -552,7 +809,7 @@ void clock_ui_show_clock(void)
         return;
     }
     if (s_ui.clock_screen != NULL) {
-        show_clock_screen();
+        show_main_page(MAIN_PAGE_CLOCK);
     }
     esp_lv_adapter_unlock();
 }

@@ -3,6 +3,7 @@
 #include "board.h"
 #include "clock_settings.h"
 #include "clock_ui.h"
+#include "energy_service.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -39,6 +40,11 @@ extern "C" void app_main(void)
             const esp_err_t time_error = time_service_start();
             if (time_error == ESP_OK) {
                 time_sync_started = true;
+                const esp_err_t energy_error = energy_service_start();
+                if (energy_error != ESP_OK) {
+                    ESP_LOGW(TAG, "Unable to start energy service: %s",
+                             esp_err_to_name(energy_error));
+                }
             } else {
                 ESP_LOGW(TAG, "Unable to start time synchronization: %s",
                          esp_err_to_name(time_error));

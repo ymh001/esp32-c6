@@ -11,6 +11,7 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES
         board
+        energy_service
         settings
         time_service
         wifi_manager

@@ -5,7 +5,8 @@ This directory is the isolated workspace for the Waveshare
 
 The first firmware project is `firmware/desk-clock/`. It contains the working
 ESP-IDF clock, touch UI, local settings, hardcoded Wi-Fi connection, lunar
-calendar, and NTP time synchronization.
+calendar, NTP time synchronization, electricity usage monitoring, and
+brightness controls.
 
 ## Layout
 
