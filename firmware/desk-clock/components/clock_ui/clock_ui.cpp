@@ -626,7 +626,7 @@ static void build_energy_screen(void)
         lv_obj_align(label, LV_ALIGN_TOP_MID, 0, 14);
 
         s_ui.energy_value_labels[i] =
-            make_label(card, "-- kWh", &clock_dot_32, lv_color_white());
+            make_label(card, "-- kWh", s_cjk_date_font, lv_color_white());
         lv_obj_align(s_ui.energy_value_labels[i], LV_ALIGN_CENTER, 0, 8);
     }
 
@@ -683,7 +683,7 @@ static void build_control_screen(void)
                         LV_EVENT_RELEASED, NULL);
 
     s_ui.brightness_value_label =
-        make_label(s_ui.control_screen, "80%", &clock_dot_32,
+        make_label(s_ui.control_screen, "80%", s_cjk_title_font,
                    lv_color_white());
     lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 226);
     lv_label_set_text_fmt(s_ui.brightness_value_label, "%u%%",
