@@ -10,8 +10,8 @@
 #include "esp_log.h"
 #include "lunar.h"
 #include "lvgl.h"
-#include "net_config.h"
 #include "time_service.h"
+#include "wifi_manager.h"
 
 static const char *TAG = "clock_ui";
 
@@ -325,15 +325,15 @@ static void update_clock(void)
     }
 
     char status[96];
-    if (net_config_is_portal()) {
-        snprintf(status, sizeof(status), "配网热点 192.168.4.1");
-    } else if (net_config_is_connected()) {
+    if (wifi_manager_is_connected()) {
         char ip[16];
-        net_config_get_ip(ip, sizeof(ip));
+        wifi_manager_get_ip(ip, sizeof(ip));
         snprintf(status, sizeof(status), "%s  %s",
                  time_service_is_synced() ? "NTP 已同步" : "等待校时", ip);
+    } else if (wifi_manager_state() == WIFI_MANAGER_CONNECTING) {
+        snprintf(status, sizeof(status), "WiFi 连接中");
     } else {
-        snprintf(status, sizeof(status), "网络未连接");
+        snprintf(status, sizeof(status), "WiFi 未连接");
     }
     lv_label_set_text(s_ui.status_label, status);
     update_week_strip(&local);

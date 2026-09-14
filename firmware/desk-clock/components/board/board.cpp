@@ -100,15 +100,10 @@ bool board_key_pressed(void)
     return gpio_get_level((gpio_num_t)BOARD_KEY_GPIO) == 0;
 }
 
-bool board_boot_pressed(void)
-{
-    return gpio_get_level((gpio_num_t)BOARD_BOOT_GPIO) == 0;
-}
-
 esp_err_t board_buttons_init(void)
 {
     const gpio_config_t config = {
-        .pin_bit_mask = (1ULL << BOARD_KEY_GPIO) | (1ULL << BOARD_BOOT_GPIO),
+        .pin_bit_mask = (1ULL << BOARD_KEY_GPIO),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_ENABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,

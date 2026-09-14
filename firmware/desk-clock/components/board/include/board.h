@@ -30,7 +30,6 @@ extern "C" {
 #define BOARD_TOUCH_INT_GPIO 5
 
 #define BOARD_KEY_GPIO 10
-#define BOARD_BOOT_GPIO 9
 
 typedef struct {
     esp_lcd_panel_handle_t panel;
@@ -46,7 +45,6 @@ esp_err_t board_rtc_read(struct tm *out);
 esp_err_t board_rtc_write(const struct tm *value);
 
 bool board_key_pressed(void);
-bool board_boot_pressed(void);
 
 #ifdef __cplusplus
 }

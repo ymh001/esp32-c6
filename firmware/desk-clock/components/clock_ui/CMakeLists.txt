@@ -12,8 +12,8 @@ idf_component_register(
     REQUIRES
         board
         settings
-        net_config
         time_service
+        wifi_manager
         lunar
     PRIV_REQUIRES
         lvgl__lvgl

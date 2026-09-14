@@ -4,7 +4,7 @@ idf_component_register(
     REQUIRES
         board
         clock_ui
-        net_config
         settings
         time_service
+        wifi_manager
 )

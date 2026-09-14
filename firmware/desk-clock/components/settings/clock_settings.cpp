@@ -60,10 +60,6 @@ esp_err_t clock_settings_load(clock_settings_t *settings)
         return err;
     }
 
-    load_string(handle, "ssid", settings->wifi_ssid,
-                sizeof(settings->wifi_ssid));
-    load_string(handle, "password", settings->wifi_password,
-                sizeof(settings->wifi_password));
     load_string(handle, "timezone", settings->timezone,
                 sizeof(settings->timezone));
     load_string(handle, "ntp1", settings->ntp_server_1,
@@ -75,10 +71,6 @@ esp_err_t clock_settings_load(clock_settings_t *settings)
     nvs_get_u8(handle, "night_bright", &settings->night_brightness);
     nvs_get_u8(handle, "night_start", &settings->night_start_hour);
     nvs_get_u8(handle, "night_end", &settings->night_end_hour);
-    uint8_t portal_request = 0;
-    if (nvs_get_u8(handle, "portal", &portal_request) == ESP_OK) {
-        settings->force_portal = portal_request != 0;
-    }
 
     nvs_close(handle);
     return ESP_OK;
@@ -95,8 +87,6 @@ esp_err_t clock_settings_save(const clock_settings_t *settings)
         nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle), TAG, "NVS open");
 
     esp_err_t err = ESP_OK;
-    err |= nvs_set_str(handle, "ssid", settings->wifi_ssid);
-    err |= nvs_set_str(handle, "password", settings->wifi_password);
     err |= nvs_set_str(handle, "timezone", settings->timezone);
     err |= nvs_set_str(handle, "ntp1", settings->ntp_server_1);
     err |= nvs_set_str(handle, "ntp2", settings->ntp_server_2);
@@ -105,21 +95,6 @@ esp_err_t clock_settings_save(const clock_settings_t *settings)
     err |= nvs_set_u8(handle, "night_bright", settings->night_brightness);
     err |= nvs_set_u8(handle, "night_start", settings->night_start_hour);
     err |= nvs_set_u8(handle, "night_end", settings->night_end_hour);
-    err |= nvs_set_u8(handle, "portal", settings->force_portal);
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
-    nvs_close(handle);
-    return err;
-}
-
-esp_err_t clock_settings_set_portal_request(bool enabled)
-{
-    nvs_handle_t handle;
-    ESP_RETURN_ON_ERROR(
-        nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle), TAG, "NVS open");
-    esp_err_t err =
-        nvs_set_u8(handle, "portal", enabled ? (uint8_t)1 : (uint8_t)0);
     if (err == ESP_OK) {
         err = nvs_commit(handle);
     }

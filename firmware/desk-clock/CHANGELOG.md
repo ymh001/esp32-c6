@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-09-15
+
+### Changed
+
+- Replaced the setup portal and editable Wi-Fi settings with a station-only
+  Wi-Fi manager using compile-time credentials.
+- Centralized the SSID and password in `wifi_credentials.h`.
+- Added automatic reconnect with capped backoff.
+- Start SNTP only after the device obtains a Wi-Fi address.
+
+### Removed
+
+- SoftAP setup hotspot, HTTP configuration server, captive-portal DNS, Wi-Fi
+  scanning, NVS Wi-Fi storage, and the BOOT-button configuration entry point.
+
 ## 2026-09-14
 
 ### Added
