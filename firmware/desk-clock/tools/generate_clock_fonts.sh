@@ -6,6 +6,8 @@ FONT_PATH="${SOURCE_HAN_SANS_FONT:-/tmp/SourceHanSansSC-Regular.otf}"
 FONT_URL="https://github.com/adobe-fonts/source-han-sans/raw/release/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf"
 DOTO_PATH="${DOTO_FONT:-/tmp/Doto.ttf}"
 DOTO_URL="https://github.com/google/fonts/raw/main/ofl/doto/Doto%5BROND%2Cwght%5D.ttf"
+HANDJET_PATH="${HANDJET_FONT:-/tmp/Handjet.ttf}"
+HANDJET_URL="https://github.com/google/fonts/raw/main/ofl/handjet/Handjet%5BELGR%2CELSH%2Cwght%5D.ttf"
 FONT_DIR="$ROOT_DIR/components/clock_ui/fonts"
 GLYPHS_PATH="$FONT_DIR/clock_glyphs.txt"
 
@@ -14,6 +16,9 @@ if [[ ! -f "$FONT_PATH" ]]; then
 fi
 if [[ ! -f "$DOTO_PATH" ]]; then
     curl -L --fail --retry 3 "$DOTO_URL" -o "$DOTO_PATH"
+fi
+if [[ ! -f "$HANDJET_PATH" ]]; then
+    curl -L --fail --retry 3 "$HANDJET_URL" -o "$HANDJET_PATH"
 fi
 
 SOURCE_FILES=()
@@ -46,7 +51,7 @@ for size in 16 24 32; do
 done
 
 npx --yes lv_font_conv \
-    --font "$DOTO_PATH" \
+    --font "$HANDJET_PATH" \
     --symbols "0123456789:. kWh%-" \
     --size 32 \
     --bpp 4 \
