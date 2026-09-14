@@ -15,7 +15,7 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 - Compile-time Wi-Fi credentials with automatic reconnect and SNTP startup
   after the network is available.
 - Electricity page with today, current week, current month, and remaining kWh.
-- Automatic electricity refresh every three hours plus a manual refresh.
+- Automatic electricity refresh every hour plus a manual refresh.
 - NVS persistence for local clock preferences.
 - Automatic day and night brightness.
 - Two-pixel QSPI redraw alignment to prevent sheared or slanted partial updates.

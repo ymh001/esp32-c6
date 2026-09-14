@@ -5,7 +5,7 @@
 ### Changed
 
 - Added an electricity page with today, week, month, and remaining kWh.
-- Added three-hour background refresh and a manual refresh button.
+- Added hourly background refresh and a manual refresh button.
 - Added a control page with a brightness slider, opened by a downward swipe or
   the electricity page's gear button.
 - Reworked the brightness control as a thick pill track that jumps to the

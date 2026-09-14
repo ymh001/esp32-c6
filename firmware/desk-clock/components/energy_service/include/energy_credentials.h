@@ -10,4 +10,4 @@
 #define ENERGY_ELECTRICITY_BUSINESS_TYPE 0
 
 // Keep automatic requests infrequent; the page also has a manual refresh.
-#define ENERGY_REFRESH_INTERVAL_SECONDS (3 * 60 * 60)
+#define ENERGY_REFRESH_INTERVAL_SECONDS (60 * 60)
