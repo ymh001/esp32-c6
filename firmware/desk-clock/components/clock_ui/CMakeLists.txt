@@ -4,10 +4,7 @@ idf_component_register(
         "fonts/clock_cjk_16.c"
         "fonts/clock_cjk_24.c"
         "fonts/clock_cjk_32.c"
-        "fonts/clock_dot_24.c"
-        "fonts/clock_dot_32.c"
-        "fonts/clock_dot_48.c"
-        "fonts/clock_dot_96.c"
+        "fonts/clock_cjk_96.c"
     INCLUDE_DIRS "include"
     REQUIRES
         board

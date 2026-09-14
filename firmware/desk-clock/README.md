@@ -4,8 +4,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 
 ## Current Features
 
-- 480 x 480 AMOLED clock with a Dot Matrix time font, Gregorian date, weekday,
-  and lunar date.
+- 480 x 480 AMOLED clock with a unified Source Han Sans display, Gregorian
+  date, weekday, and lunar date.
 - Local Chinese lunar conversion and 24 solar terms for 1902 through 2099.
 - Traditional lunar festivals and common Gregorian holidays.
 - Full Gregorian month view with lunar day, solar term, or festival in each
@@ -20,8 +20,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 - Automatic day and night brightness.
 - Two-pixel QSPI redraw alignment to prevent sheared or slanted partial updates.
 - A rounded-screen safe layout for the calendar controls and grid.
-- A dense clock layout with a 96 px Dot Matrix time display and a full-width
-  seven-day Gregorian and lunar strip.
+- A dense clock layout with a 96 px time display and a full-width seven-day
+  Gregorian and lunar strip.
 
 ## Controls
 
@@ -30,8 +30,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 - Use `<` and `>` to change months.
 - Swipe down from any main page to open the control screen, or use the gear
   button on the electricity page.
-- Adjust screen brightness with the slider. Swipe up or use the close button to
-  return.
+- The control panel slides and fades in. Adjust screen brightness with the
+  slider, then swipe up to return. Device battery percentage is shown below.
 - Press KEY (GPIO10) as an optional hardware shortcut to toggle between the
   main pages.
 

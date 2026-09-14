@@ -8,6 +8,8 @@
 - Added three-hour background refresh and a manual refresh button.
 - Added a control page with a brightness slider, opened by a downward swipe or
   the electricity page's gear button.
+- Added a slide/fade transition for the control panel and device battery
+  percentage from the AXP2101.
 - Replaced the calendar/clock tap targets with left/right swipe navigation and
   cyclic switching across the three main pages.
 - Replaced the setup portal and editable Wi-Fi settings with a station-only

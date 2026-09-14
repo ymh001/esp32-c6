@@ -41,6 +41,7 @@ esp_err_t board_init(void);
 const board_display_t *board_display(void);
 
 void board_set_backlight(uint8_t percent);
+esp_err_t board_power_get_battery(uint8_t *percent, uint16_t *voltage_mv);
 esp_err_t board_rtc_read(struct tm *out);
 esp_err_t board_rtc_write(const struct tm *value);
 

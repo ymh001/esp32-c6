@@ -21,10 +21,7 @@ static const char *TAG = "clock_ui";
 LV_FONT_DECLARE(clock_cjk_16);
 LV_FONT_DECLARE(clock_cjk_24);
 LV_FONT_DECLARE(clock_cjk_32);
-LV_FONT_DECLARE(clock_dot_24);
-LV_FONT_DECLARE(clock_dot_32);
-LV_FONT_DECLARE(clock_dot_48);
-LV_FONT_DECLARE(clock_dot_96);
+LV_FONT_DECLARE(clock_cjk_96);
 
 typedef enum {
     MAIN_PAGE_CLOCK = 0,
@@ -50,8 +47,10 @@ typedef struct {
     lv_obj_t *week_lunar_labels[7];
     lv_obj_t *energy_value_labels[4];
     lv_obj_t *energy_status_label;
+    lv_obj_t *control_panel;
     lv_obj_t *brightness_slider;
     lv_obj_t *brightness_value_label;
+    lv_obj_t *battery_label;
     main_page_t current_page;
     main_page_t previous_page;
     int displayed_year;
@@ -68,6 +67,7 @@ static clock_settings_t s_ui_settings;
 static const lv_font_t *s_cjk_font = &clock_cjk_16;
 static const lv_font_t *s_cjk_title_font = &clock_cjk_24;
 static const lv_font_t *s_cjk_date_font = &clock_cjk_32;
+static const lv_font_t *s_cjk_clock_font = &clock_cjk_96;
 static uint32_t s_last_view_switch_tick;
 
 void clock_ui_render_calendar(int year, int month);
@@ -154,7 +154,30 @@ static void show_control_screen(void)
     if (lv_screen_active() != s_ui.control_screen) {
         s_ui.previous_page = s_ui.current_page;
     }
+    lv_anim_delete(s_ui.control_panel, NULL);
+    lv_obj_set_y(s_ui.control_panel, 28);
+    lv_obj_set_style_opa(s_ui.control_panel, LV_OPA_TRANSP, 0);
     lv_screen_load(s_ui.control_screen);
+
+    lv_anim_t animation;
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, s_ui.control_panel);
+    lv_anim_set_exec_cb(&animation, (lv_anim_exec_xcb_t)lv_obj_set_y);
+    lv_anim_set_values(&animation, 28, 0);
+    lv_anim_set_duration(&animation, 220);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
+    lv_anim_start(&animation);
+
+    lv_anim_init(&animation);
+    lv_anim_set_var(&animation, s_ui.control_panel);
+    lv_anim_set_exec_cb(
+        &animation, [](void *object, int32_t opacity) {
+            lv_obj_set_style_opa((lv_obj_t *)object, (lv_opa_t)opacity, 0);
+        });
+    lv_anim_set_values(&animation, LV_OPA_TRANSP, LV_OPA_COVER);
+    lv_anim_set_duration(&animation, 220);
+    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
+    lv_anim_start(&animation);
 }
 
 static void close_control_screen(void)
@@ -329,7 +352,7 @@ static void render_calendar(int year, int month)
         char day_text[16];
         snprintf(day_text, sizeof(day_text), "%d", current_day);
         lv_obj_t *day_label = make_label(
-            cell, day_text, &clock_dot_32,
+            cell, day_text, s_cjk_title_font,
             in_current_month ? lv_color_white() : lv_color_hex(0x5B6472));
         lv_obj_align(day_label, LV_ALIGN_TOP_MID, 0, 3);
 
@@ -459,11 +482,36 @@ static void update_energy_view(void)
                                                         : "等待更新");
 }
 
+static void update_battery_view(void)
+{
+    static uint8_t last_percent = UINT8_MAX;
+    uint8_t percent = 0;
+    uint16_t voltage_mv = 0;
+    const esp_err_t err = board_power_get_battery(&percent, &voltage_mv);
+    if (err != ESP_OK) {
+        lv_label_set_text(s_ui.battery_label, "--");
+        return;
+    }
+    char text[16];
+    snprintf(text, sizeof(text), "%u%%", percent);
+    lv_label_set_text(s_ui.battery_label, text);
+    if (percent != last_percent) {
+        last_percent = percent;
+        ESP_LOGI(TAG, "Battery: %u%%, %u mV", percent, voltage_mv);
+    }
+}
+
 static void clock_timer(lv_timer_t *timer)
 {
     (void)timer;
     update_clock();
     update_energy_view();
+
+    static int battery_countdown;
+    if (battery_countdown-- <= 0) {
+        battery_countdown = 5;
+        update_battery_view();
+    }
 }
 
 static void build_clock_screen(void)
@@ -477,12 +525,12 @@ static void build_clock_screen(void)
                         NULL);
 
     s_ui.time_label =
-        make_label(s_ui.clock_screen, "00:00", &clock_dot_96,
+        make_label(s_ui.clock_screen, "00:00", s_cjk_clock_font,
                    lv_color_white());
     lv_obj_align(s_ui.time_label, LV_ALIGN_TOP_MID, -34, 50);
 
     s_ui.seconds_label =
-        make_label(s_ui.clock_screen, ":00", &clock_dot_32,
+        make_label(s_ui.clock_screen, ":00", s_cjk_date_font,
                    lv_color_hex(0xF3A712));
     lv_obj_align_to(s_ui.seconds_label, s_ui.time_label, LV_ALIGN_OUT_RIGHT_BOTTOM,
                     6, -12);
@@ -527,7 +575,7 @@ static void build_clock_screen(void)
         lv_obj_align(s_ui.week_name_labels[i], LV_ALIGN_TOP_MID, 0, 9);
 
         s_ui.week_day_labels[i] =
-            make_label(cell, "", &clock_dot_32, lv_color_white());
+            make_label(cell, "", s_cjk_date_font, lv_color_white());
         lv_obj_align(s_ui.week_day_labels[i], LV_ALIGN_CENTER, 0, 0);
 
         s_ui.week_lunar_labels[i] =
@@ -546,12 +594,6 @@ static void control_button_clicked(lv_event_t *event)
 {
     (void)event;
     show_control_screen();
-}
-
-static void close_control_clicked(lv_event_t *event)
-{
-    (void)event;
-    close_control_screen();
 }
 
 static void brightness_changed(lv_event_t *event)
@@ -649,29 +691,30 @@ static void build_control_screen(void)
     lv_obj_add_event_cb(s_ui.control_screen, screen_gesture_cb,
                         LV_EVENT_GESTURE, NULL);
 
+    s_ui.control_panel = lv_obj_create(s_ui.control_screen);
+    lv_obj_set_size(s_ui.control_panel, 440, 300);
+    lv_obj_align(s_ui.control_panel, LV_ALIGN_CENTER, 0, 20);
+    lv_obj_clear_flag(s_ui.control_panel, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_radius(s_ui.control_panel, 10, 0);
+    lv_obj_set_style_bg_color(s_ui.control_panel, lv_color_hex(0x10141B), 0);
+    lv_obj_set_style_border_width(s_ui.control_panel, 1, 0);
+    lv_obj_set_style_border_color(s_ui.control_panel,
+                                  lv_color_hex(0x252C37), 0);
+    lv_obj_set_style_pad_all(s_ui.control_panel, 0, 0);
+
     lv_obj_t *title =
-        make_label(s_ui.control_screen, "控制", s_cjk_title_font,
+        make_label(s_ui.control_panel, "控制", s_cjk_title_font,
                    lv_color_white());
     lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 18);
 
-    lv_obj_t *close = lv_button_create(s_ui.control_screen);
-    lv_obj_set_size(close, 60, 36);
-    lv_obj_set_pos(close, 402, 16);
-    lv_obj_clear_flag(close, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_set_style_bg_color(close, lv_color_hex(0x1A2029), 0);
-    lv_obj_add_event_cb(close, close_control_clicked, LV_EVENT_CLICKED, NULL);
-    lv_obj_t *close_label =
-        make_label(close, "关闭", s_cjk_font, lv_color_white());
-    lv_obj_center(close_label);
-
     lv_obj_t *brightness_label =
-        make_label(s_ui.control_screen, "屏幕亮度", s_cjk_title_font,
+        make_label(s_ui.control_panel, "屏幕亮度", s_cjk_title_font,
                    lv_color_hex(0xD7DDE7));
-    lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 126);
+    lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 86);
 
-    s_ui.brightness_slider = lv_slider_create(s_ui.control_screen);
+    s_ui.brightness_slider = lv_slider_create(s_ui.control_panel);
     lv_obj_set_size(s_ui.brightness_slider, 320, 18);
-    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 184);
+    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 144);
     lv_slider_set_range(s_ui.brightness_slider, 10, 100);
     lv_slider_set_value(s_ui.brightness_slider, s_ui_settings.brightness,
                         LV_ANIM_OFF);
@@ -687,12 +730,22 @@ static void build_control_screen(void)
                         LV_EVENT_RELEASED, NULL);
 
     s_ui.brightness_value_label =
-        make_label(s_ui.control_screen, "80%", s_cjk_title_font,
+        make_label(s_ui.control_panel, "80%", s_cjk_title_font,
                    lv_color_white());
-    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 226);
+    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 188);
     char text[16];
     snprintf(text, sizeof(text), "%u%%", s_ui_settings.brightness);
     lv_label_set_text(s_ui.brightness_value_label, text);
+
+    lv_obj_t *battery_title =
+        make_label(s_ui.control_panel, "设备电量", s_cjk_font,
+                   lv_color_hex(0x8E98A8));
+    lv_obj_align(battery_title, LV_ALIGN_BOTTOM_LEFT, 34, -26);
+
+    s_ui.battery_label =
+        make_label(s_ui.control_panel, "--", s_cjk_title_font,
+                   lv_color_white());
+    lv_obj_align(s_ui.battery_label, LV_ALIGN_BOTTOM_RIGHT, -34, -22);
 }
 
 static void build_calendar_screen(void)
