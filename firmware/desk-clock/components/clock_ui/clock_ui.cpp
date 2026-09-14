@@ -446,7 +446,7 @@ static void update_energy_view(void)
     if (snapshot.month_loaded) {
         lv_label_set_text_fmt(s_ui.energy_value_labels[2], "%.2f kWh",
                               snapshot.month_kwh);
-    } else if (snapshot.refreshing) {
+    } else if (snapshot.refreshing || snapshot.month_refreshing) {
         lv_label_set_text(s_ui.energy_value_labels[2], "--");
     }
 

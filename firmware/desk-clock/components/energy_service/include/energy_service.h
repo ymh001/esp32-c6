@@ -8,6 +8,7 @@ typedef struct {
     bool loaded;
     bool month_loaded;
     bool refreshing;
+    bool month_refreshing;
     float today_kwh;
     float week_kwh;
     float month_kwh;

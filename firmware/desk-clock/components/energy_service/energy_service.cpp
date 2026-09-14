@@ -276,7 +276,7 @@ static esp_err_t refresh_summary(void)
     return ESP_OK;
 }
 
-static esp_err_t refresh_month(void)
+static esp_err_t refresh_month_from_daily(void)
 {
     char timestamp[24];
     char year_month[8];
@@ -302,16 +302,32 @@ static esp_err_t refresh_month(void)
         return ESP_ERR_INVALID_RESPONSE;
     }
 
-    const float month = json_number(root, "monthuse");
-    xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
-    if (!isnan(month)) {
-        s_snapshot.month_kwh = month;
-        s_snapshot.month_loaded = true;
+    const cJSON *days = cJSON_GetObjectItemCaseSensitive(root, "dayuselist");
+    if (!cJSON_IsArray(days)) {
+        cJSON_Delete(root);
+        return ESP_ERR_NOT_FOUND;
     }
+
+    float month_total = 0.0f;
+    const cJSON *day = NULL;
+    cJSON_ArrayForEach(day, days) {
+        float value = json_number(day, "dayuse");
+        if (isnan(value)) {
+            value = json_number(day, "use");
+        }
+        if (!isnan(value)) {
+            month_total += value;
+        }
+    }
+
+    xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
+    s_snapshot.month_kwh = month_total;
+    s_snapshot.month_loaded = true;
     xSemaphoreGive(s_snapshot_mutex);
-    ESP_LOGI(TAG, "Electricity month=%.2f kWh", month);
+    ESP_LOGI(TAG, "Electricity month(sum)=%.2f kWh from %u daily entries",
+             month_total, (unsigned)cJSON_GetArraySize(days));
     cJSON_Delete(root);
-    return isnan(month) ? ESP_ERR_NOT_FOUND : ESP_OK;
+    return ESP_OK;
 }
 
 static void refresh_all(void)
@@ -321,21 +337,50 @@ static void refresh_all(void)
     strlcpy(s_snapshot.message, "正在更新", sizeof(s_snapshot.message));
     xSemaphoreGive(s_snapshot_mutex);
 
-    esp_err_t err = refresh_summary();
-    if (err == ESP_OK) {
-        err = refresh_month();
+    esp_err_t err = ESP_FAIL;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        err = refresh_summary();
+        if (err == ESP_OK) {
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1500));
     }
+
+    xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
+    s_snapshot.refreshing = false;
+    if (err == ESP_OK) {
+        strlcpy(s_snapshot.message, "日/周数据已更新",
+                sizeof(s_snapshot.message));
+    }
+    xSemaphoreGive(s_snapshot_mutex);
+
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Energy refresh failed: %s", esp_err_to_name(err));
         char message[64];
         snprintf(message, sizeof(message), "更新失败: %s",
                  esp_err_to_name(err));
         set_message(message);
+        return;
     }
 
     xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
-    s_snapshot.refreshing = false;
+    s_snapshot.month_refreshing = true;
     xSemaphoreGive(s_snapshot_mutex);
+    const esp_err_t month_error = refresh_month_from_daily();
+    xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
+    s_snapshot.month_refreshing = false;
+    if (month_error == ESP_OK) {
+        strlcpy(s_snapshot.message, "本月已按每日数据汇总",
+                sizeof(s_snapshot.message));
+    } else {
+        strlcpy(s_snapshot.message, "本月汇总待更新",
+                sizeof(s_snapshot.message));
+    }
+    xSemaphoreGive(s_snapshot_mutex);
+    if (month_error != ESP_OK) {
+        ESP_LOGW(TAG, "Month daily sum failed: %s",
+                 esp_err_to_name(month_error));
+    }
 }
 
 static void energy_task(void *arg)
