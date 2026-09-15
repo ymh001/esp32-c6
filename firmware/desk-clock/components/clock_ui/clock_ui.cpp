@@ -83,7 +83,7 @@ static uint32_t s_last_view_switch_tick;
 // pose turns an 84-row strip into an 84-column QSPI transfer. Keep one DMA-safe
 // scratch strip; LVGL does not submit the next partial flush until the panel IO
 // completion callback marks the current one ready.
-#define ROTATION_STRIP_ROWS 80
+#define ROTATION_STRIP_ROWS 32
 #define ROTATION_GUARD_ROWS 4
 #define ROTATION_MAX_PIXELS \
     (BOARD_LCD_H_RES * (ROTATION_STRIP_ROWS + ROTATION_GUARD_ROWS))
@@ -1012,18 +1012,19 @@ void clock_ui_show_clock(void)
 
 void clock_ui_auto_rotate_update(void)
 {
-    if (esp_lv_adapter_lock(20) != ESP_OK) {
-        return;
-    }
-
     board_rotation_t rotation = BOARD_ROTATION_0;
     bool changed = false;
     const esp_err_t err = board_auto_rotation_update(&rotation, &changed);
-    if (err == ESP_OK && changed && s_lv_display != NULL) {
-        lv_display_set_rotation(s_lv_display, lv_rotation_for_pose(rotation));
-        lv_obj_invalidate(lv_screen_active());
-        ESP_LOGI(TAG, "UI orientation set to %s degrees",
-                 board_rotation_name(rotation));
+    if (err != ESP_OK || !changed || s_lv_display == NULL) {
+        return;
     }
+
+    if (esp_lv_adapter_lock(100) != ESP_OK) {
+        return;
+    }
+    lv_display_set_rotation(s_lv_display, lv_rotation_for_pose(rotation));
+    lv_obj_invalidate(lv_screen_active());
+    ESP_LOGI(TAG, "UI orientation set to %s degrees",
+             board_rotation_name(rotation));
     esp_lv_adapter_unlock();
 }
