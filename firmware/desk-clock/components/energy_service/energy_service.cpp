@@ -1,4 +1,5 @@
 #include "energy_service.h"
+#include "network_gate.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -81,6 +82,8 @@ static esp_err_t post_form(const char *method, const char *param,
                            char **response_out)
 {
     *response_out = NULL;
+    NetworkLease network;
+    if(!network)return ESP_ERR_INVALID_STATE;
     char *encoded_param = url_encode(param);
     if (encoded_param == NULL) {
         return ESP_ERR_NO_MEM;
@@ -102,7 +105,7 @@ static esp_err_t post_form(const char *method, const char *param,
     const esp_http_client_config_t config = {
         .url = ENERGY_API_URL,
         .method = HTTP_METHOD_POST,
-        .timeout_ms = 45000,
+        .timeout_ms = 8000,
         .buffer_size = 2048,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
@@ -193,7 +196,10 @@ static float json_number(const cJSON *object, const char *key)
         return (float)item->valuedouble;
     }
     if (cJSON_IsString(item) && item->valuestring != NULL) {
-        return strtof(item->valuestring, NULL);
+        char *end = NULL;
+        const float value = strtof(item->valuestring, &end);
+        if (end != item->valuestring && *end == '\0' && isfinite(value)) return value;
+        return NAN;
     }
     return NAN;
 }
@@ -262,11 +268,18 @@ static esp_err_t refresh_summary(void)
         }
     }
 
+    const float today = json_number(meter, "todayuse");
+    const float remaining = json_number(meter, "odd");
+    if (!isfinite(today) || !isfinite(remaining) || !isfinite(week_total)) {
+        cJSON_Delete(root);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
     xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
-    s_snapshot.today_kwh = json_number(meter, "todayuse");
+    s_snapshot.today_kwh = today;
     s_snapshot.week_kwh = week_total;
-    s_snapshot.remaining_kwh = json_number(meter, "odd");
+    s_snapshot.remaining_kwh = remaining;
     s_snapshot.loaded = true;
+    s_snapshot.updated_at = time(NULL);
     strlcpy(s_snapshot.message, "使用数据已更新", sizeof(s_snapshot.message));
     xSemaphoreGive(s_snapshot_mutex);
     ESP_LOGI(TAG, "Electricity today=%.2f week=%.2f remaining=%.2f kWh",
@@ -334,6 +347,8 @@ static void refresh_all(void)
 {
     xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
     s_snapshot.refreshing = true;
+    s_snapshot.refresh_failed = false;
+    s_snapshot.month_failed = false;
     strlcpy(s_snapshot.message, "正在更新", sizeof(s_snapshot.message));
     xSemaphoreGive(s_snapshot_mutex);
 
@@ -348,6 +363,8 @@ static void refresh_all(void)
 
     xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
     s_snapshot.refreshing = false;
+    s_snapshot.refresh_failed = err != ESP_OK;
+    s_snapshot.month_refreshing = err == ESP_OK;
     if (err == ESP_OK) {
         strlcpy(s_snapshot.message, "日/周数据已更新",
                 sizeof(s_snapshot.message));
@@ -369,6 +386,7 @@ static void refresh_all(void)
     const esp_err_t month_error = refresh_month_from_daily();
     xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
     s_snapshot.month_refreshing = false;
+    s_snapshot.month_failed = month_error != ESP_OK;
     if (month_error == ESP_OK) {
         strlcpy(s_snapshot.message, "本月已按每日数据汇总",
                 sizeof(s_snapshot.message));
@@ -394,7 +412,7 @@ static void energy_task(void *arg)
     }
 }
 
-esp_err_t energy_service_start(void)
+esp_err_t energy_service_init(void)
 {
     if (s_snapshot_mutex != NULL && s_events != NULL) {
         return ESP_OK;
@@ -414,26 +432,42 @@ esp_err_t energy_service_start(void)
     }
     strlcpy(s_snapshot.message, "等待更新", sizeof(s_snapshot.message));
 
+    return ESP_OK;
+}
+
+esp_err_t energy_service_start(void)
+{
+    static bool started;
+    if (started) return ESP_OK;
+    if (s_snapshot_mutex == NULL || s_events == NULL) return ESP_ERR_INVALID_STATE;
+    // These objects are already visible to the UI. Keep them alive on task
+    // allocation failure so app_main can retry without a use-after-free.
     if (xTaskCreate(energy_task, "energy", 12288, NULL, 4, NULL) != pdPASS) {
-        vSemaphoreDelete(s_snapshot_mutex);
-        vEventGroupDelete(s_events);
-        s_snapshot_mutex = NULL;
-        s_events = NULL;
         return ESP_ERR_NO_MEM;
     }
+    started = true;
     return ESP_OK;
 }
 
 void energy_service_request_refresh(void)
 {
     if (s_events != NULL) {
+        xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);
+        if (s_snapshot.refreshing || s_snapshot.month_refreshing) {
+            xSemaphoreGive(s_snapshot_mutex);
+            return;
+        }
+        s_snapshot.refreshing = true;
+        xSemaphoreGive(s_snapshot_mutex);
         xEventGroupSetBits(s_events, ENERGY_REFRESH_BIT);
     }
 }
 
 void energy_service_get_snapshot(energy_snapshot_t *snapshot)
 {
-    if (snapshot == NULL || s_snapshot_mutex == NULL) {
+    if (snapshot == NULL) return;
+    if (s_snapshot_mutex == NULL) {
+        memset(snapshot, 0, sizeof(*snapshot));
         return;
     }
     xSemaphoreTake(s_snapshot_mutex, portMAX_DELAY);

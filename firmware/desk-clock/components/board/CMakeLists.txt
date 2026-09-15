@@ -1,10 +1,12 @@
 idf_component_register(
     SRCS
         "board.cpp"
+        "audio.cpp"
         "imu.cpp"
         "orientation_math.cpp"
         "display.cpp"
         "power.cpp"
+        "battery_math.cpp"
         "rtc.cpp"
     INCLUDE_DIRS
         "include"
@@ -13,6 +15,8 @@ idf_component_register(
         waveshare__esp_lcd_touch_cst9217
     PRIV_REQUIRES
         driver
+        esp_driver_i2s
+        espressif__esp_codec_dev
         esp_driver_gpio
         esp_driver_i2c
         esp_driver_spi

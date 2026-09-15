@@ -30,6 +30,27 @@ int main(void)
     lunar_calendar_cell_text(2024, 2, 10, text, sizeof(text));
     assert(strcmp(text, "春节") == 0);
 
+    lunar_date_t invalid = {};
+    assert(!lunar_from_solar(2026, 2, 29, &invalid));
+    assert(!lunar_from_solar(2026, 4, 31, &invalid));
+    assert(!lunar_from_solar(1901, 1, 1, &invalid));
+    assert(!lunar_from_solar(2100, 1, 1, &invalid));
+    assert(lunar_from_solar(2024, 2, 29, &invalid));
+    assert(lunar_day_of_week(2026, 0, 1) == -1);
+    assert(lunar_day_of_week(2026, 13, 1) == -1);
+    assert(lunar_day_of_week(2026, 2, 29) == -1);
+    // Walk the supported table to detect out-of-range lunar table results.
+    for (int year = 1902; year <= 2099; ++year) {
+        for (int month = 1; month <= 12; ++month) {
+            for (int day = 1; day <= 31; ++day) {
+                lunar_date_t result = {};
+                if (!lunar_from_solar(year, month, day, &result)) continue;
+                assert(result.month >= 1 && result.month <= 12);
+                assert(result.day >= 1 && result.day <= 30);
+                assert(result.year == year || result.year == year - 1);
+            }
+        }
+    }
     puts("lunar tests passed");
     return 0;
 }

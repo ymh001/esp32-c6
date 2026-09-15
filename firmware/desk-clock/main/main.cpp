@@ -10,6 +10,9 @@
 #include "freertos/task.h"
 #include "time_service.h"
 #include "wifi_manager.h"
+#include "voice_service.h"
+#include "network_gate.h"
+#include "ha_devices.h"
 
 static const char *TAG = "desk-clock";
 
@@ -28,6 +31,10 @@ extern "C" void app_main(void)
     }
     ESP_ERROR_CHECK(time_service_init(&settings));
     ESP_ERROR_CHECK(wifi_manager_start());
+    ESP_ERROR_CHECK(network_gate_init());
+    ESP_ERROR_CHECK(energy_service_init());
+    ESP_ERROR_CHECK(voice_service_init());
+    ESP_ERROR_CHECK(ha_devices_init());
     ESP_ERROR_CHECK(clock_ui_start(&settings));
 
     bool key_was_pressed = false;
@@ -38,6 +45,9 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Desk clock started");
 
     while (true) {
+        clock_settings_process();
+        time_service_process();
+        clock_ui_poll_battery();
         if (!time_sync_started && wifi_manager_is_connected()) {
             const esp_err_t time_error = time_service_start();
             if (time_error == ESP_OK) {

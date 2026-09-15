@@ -120,16 +120,18 @@ esp_err_t board_display_init(board_display_t *display)
     return ESP_OK;
 }
 
-void board_set_backlight(uint8_t percent)
+esp_err_t board_set_backlight(uint8_t percent)
 {
     const board_display_t *display = board_display();
     if (display == NULL || display->panel_io == NULL) {
-        return;
+        return ESP_ERR_INVALID_STATE;
     }
     if (percent > 100) {
         percent = 100;
     }
     uint8_t value = (uint8_t)((percent * 255U) / 100U);
     uint32_t command = ((uint32_t)0x51 << 8) | ((uint32_t)0x02 << 24);
-    esp_lcd_panel_io_tx_param(display->panel_io, command, &value, 1);
+    const esp_err_t err = esp_lcd_panel_io_tx_param(display->panel_io, command, &value, 1);
+    if (err != ESP_OK) ESP_LOGW(TAG, "Brightness write failed: %s", esp_err_to_name(err));
+    return err;
 }

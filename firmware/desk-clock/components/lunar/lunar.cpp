@@ -138,10 +138,18 @@ static int solar_term_day(int year, int index)
     return term_day;
 }
 
+static bool valid_solar_date(int year, int month, int day)
+{
+    if (year < 1 || year > 9999 || month < 1 || month > 12 || day < 1) return false;
+    static const int lengths[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    const bool leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    return day <= lengths[month - 1] + (month == 2 && leap ? 1 : 0);
+}
+
 bool lunar_from_solar(int year, int month, int day, lunar_date_t *out)
 {
     if (out == NULL || year < 1902 || year > 2099 || month < 1 ||
-        month > 12 || day < 1 || day > 31) {
+        month > 12 || !valid_solar_date(year, month, day)) {
         return false;
     }
 
@@ -224,6 +232,7 @@ bool lunar_from_solar(int year, int month, int day, lunar_date_t *out)
 
 int lunar_day_of_week(int year, int month, int day)
 {
+    if (!valid_solar_date(year, month, day)) return -1;
     static const int offsets[] = {0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4};
     if (month < 3) {
         --year;
@@ -254,7 +263,7 @@ const char *lunar_day_name(int day)
 
 const char *solar_term_for_date(int year, int month, int day)
 {
-    if (month < 1 || month > 12) {
+    if (!valid_solar_date(year, month, day)) {
         return NULL;
     }
     const int first = (month - 1) * 2;
@@ -269,6 +278,7 @@ const char *solar_term_for_date(int year, int month, int day)
 
 const char *festival_for_date(int year, int month, int day)
 {
+    if (!valid_solar_date(year, month, day)) return NULL;
     if (month == 1 && day == 1) {
         return "元旦";
     }

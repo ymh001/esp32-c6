@@ -10,8 +10,10 @@
 #include "freertos/FreeRTOS.h"
 
 static const char *TAG = "time";
-static volatile bool s_synced;
-static volatile int64_t s_last_sync;
+static portMUX_TYPE s_sync_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool s_synced;
+static bool s_rtc_write_pending;
+static int64_t s_last_sync;
 static clock_settings_t s_settings;
 static bool s_initialized;
 static bool s_sntp_started;
@@ -29,9 +31,11 @@ static void write_system_time_to_rtc(void)
 
 static void sntp_sync_callback(struct timeval *tv)
 {
+    portENTER_CRITICAL(&s_sync_lock);
     s_synced = true;
     s_last_sync = (int64_t)tv->tv_sec;
-    write_system_time_to_rtc();
+    s_rtc_write_pending = true;
+    portEXIT_CRITICAL(&s_sync_lock);
     ESP_LOGI(TAG, "Time synchronized");
 }
 
@@ -98,16 +102,31 @@ esp_err_t time_service_start(void)
 
 bool time_service_is_synced(void)
 {
-    return s_synced;
+    portENTER_CRITICAL(&s_sync_lock);
+    const bool synced = s_synced;
+    portEXIT_CRITICAL(&s_sync_lock);
+    return synced;
 }
 
 int64_t time_service_last_sync_epoch(void)
 {
-    return s_last_sync;
+    portENTER_CRITICAL(&s_sync_lock);
+    const int64_t last_sync = s_last_sync;
+    portEXIT_CRITICAL(&s_sync_lock);
+    return last_sync;
 }
 
 void time_service_get_local(struct tm *out)
 {
     time_t now = time(NULL);
     localtime_r(&now, out);
+}
+
+void time_service_process(void)
+{
+    portENTER_CRITICAL(&s_sync_lock);
+    const bool pending = s_rtc_write_pending;
+    s_rtc_write_pending = false;
+    portEXIT_CRITICAL(&s_sync_lock);
+    if (pending) write_system_time_to_rtc();
 }

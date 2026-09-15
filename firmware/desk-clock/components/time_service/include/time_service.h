@@ -13,3 +13,5 @@ void time_service_apply_timezone(const char *timezone);
 bool time_service_is_synced(void);
 int64_t time_service_last_sync_epoch(void);
 void time_service_get_local(struct tm *out);
+
+void time_service_process(void);

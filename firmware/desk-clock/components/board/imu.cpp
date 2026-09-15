@@ -22,6 +22,7 @@ static const char *TAG = "imu";
 #define ORIENTATION_STABLE_SAMPLES 5
 
 static i2c_master_dev_handle_t s_imu;
+static bool s_imu_ready;
 static float s_filtered_x;
 static float s_filtered_y;
 static float s_filtered_z;
@@ -78,6 +79,7 @@ esp_err_t board_imu_init(void)
         board_i2c_write_reg(s_imu, QMI8658_REG_CTRL7, &ctrl7, 1), TAG,
         "Enable accelerometer");
     vTaskDelay(pdMS_TO_TICKS(20));
+    s_imu_ready = true;
     ESP_LOGI(TAG, "QMI8658 ready; 0 degrees is buttons up / USB-C down");
     return ESP_OK;
 }
@@ -89,7 +91,7 @@ esp_err_t board_auto_rotation_update(board_rotation_t *rotation, bool *changed)
     }
     *rotation = s_applied_rotation;
     *changed = false;
-    if (s_imu == NULL) {
+    if (!s_imu_ready) {
         return ESP_ERR_INVALID_STATE;
     }
 

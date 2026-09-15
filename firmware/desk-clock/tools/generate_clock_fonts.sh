@@ -26,9 +26,11 @@ ruby -e '
 
 SYMBOLS="$(cat "$GLYPHS_PATH")"
 for size in 16 24 32 96; do
+    FONT_RANGE="0x20-0x7F"
+    if [[ "$size" == 16 ]]; then FONT_RANGE="0x20-0x7F,0x4E00-0x9FFF"; fi
     npx --yes lv_font_conv \
         --font "$FONT_PATH" \
-        --range 0x20-0x7F \
+        --range "$FONT_RANGE" \
         --symbols "$SYMBOLS" \
         --size "$size" \
         --bpp 4 \
@@ -38,3 +40,8 @@ for size in 16 24 32 96; do
         --lv-font-name "clock_cjk_$size" \
         -o "$FONT_DIR/clock_cjk_$size.c"
 done
+
+# The energy hero only needs numbers, so avoid another large Chinese font.
+npx --yes lv_font_conv --font "$FONT_PATH" --symbols '0123456789.-' \
+    --size 64 --bpp 4 --format lvgl --no-compress --lv-include lvgl.h \
+    --lv-font-name energy_digits_64 -o "$FONT_DIR/energy_digits_64.c"

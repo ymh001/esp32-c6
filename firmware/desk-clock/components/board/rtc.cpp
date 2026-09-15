@@ -36,6 +36,8 @@ esp_err_t board_rtc_read(struct tm *out)
         return err;
     }
 
+    // Oscillator-stop flag means the calendar cannot be trusted.
+    if (data[0] & 0x80) return ESP_ERR_INVALID_STATE;
     out->tm_sec = bcd_to_dec(data[0] & 0x7f);
     out->tm_min = bcd_to_dec(data[1] & 0x7f);
     out->tm_hour = bcd_to_dec(data[2] & 0x3f);

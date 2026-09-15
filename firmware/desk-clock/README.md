@@ -67,6 +67,10 @@ source "$HOME/projects/esp32/esp-idf-v5.5.2/export.sh"
 idf.py build
 ```
 
+Existing `sdkconfig` files must set `CONFIG_LV_MEM_SIZE_KILOBYTES=96`;
+`sdkconfig.defaults` does not override saved values. The UI now rejects a
+build with a smaller pool. Use `idf.py menuconfig` to update an old config.
+
 Host-side lunar tests:
 
 ```bash
@@ -140,3 +144,68 @@ configured in `components/wifi_manager/include/wifi_credentials.h`.
 
 The generated DOT Matrix and Chinese subset fonts are stored under
 `components/clock_ui/fonts/` with their OFL license files.
+
+## UI regression test
+
+In `idf.py menuconfig`, enable **Desk clock diagnostics → Run UI stress test
+at boot**, then build and flash. The test sweeps 10–100% brightness in both
+directions in all four rotations (728 value changes), changes months 96 times,
+and refreshes every page on the real panel. It checks LVGL/system heap
+integrity and requires completed panel transfers. Allow about 90 seconds and
+look for `UI SELF TEST PASS`, with no watchdog or DMA timeout errors.
+
+The test restores the loaded settings. Disable the diagnostic option and
+build/flash again for normal use. Physical touch gestures and extended uptime
+still need device testing. See `audit/2026-09-15-review.md` for the review.
+
+## Electricity page
+
+The electricity page highlights today's consumption in green, with remaining,
+weekly and monthly kWh below. A blue status label distinguishes refreshing,
+success, partial success and failure; the footer shows the last successful
+summary update time. Failed requests retain the previous readings. The bottom
+refresh button has a 432×70 pixel touch target and ignores repeated requests
+while an update is pending. Swipe down to reach brightness controls.
+
+`components/clock_ui/energy_view.cpp` owns the layout. Its headless test uses the
+same LVGL version and fonts as the firmware:
+
+```bash
+bash host_tests/run-energy-view-tests.sh
+```
+
+The test checks empty readings, success, busy/disabled, failed and partial
+states, numeric bounds, callback dispatch, and heap integrity. It also writes a
+480×480 PPM of the actual layout. A PNG reference is in `docs/energy-view.png`.
+
+## 本地语音助手
+
+小智页面直接连接本地 Home Assistant Assist。点击说话开始录音，再点一次结束，
+最长 8 秒；识别结果和回复显示在页面中，Piper 语音由板载扬声器播放。
+麦克风与扬声器采用轮流工作的方式，播放回复时不录音；暂不支持唤醒词和语音打断。
+
+构建前将 `components/voice_service/include/voice_credentials.example.h` 复制为同目录的
+`voice_credentials.h`，填入 HA 地址、中文 Assist pipeline ID 和设备专用访问令牌。
+该凭据文件被 Git 忽略。HA 必须已配置 Whisper、Piper，且设备已向 Assist 暴露。
+部署与测试记录见 `audit/2026-09-15-local-voice.md`。
+
+ESP-IDF 5.5.2 的 WebSocket 接收有缓存轮询缺陷：HA 授权消息与 HTTP 101
+一同到达时可能被搁置，导致连接超时。构建通过
+`cmake/fix_ws_buffered_read.cmake` 修正轮询和帧头读取两处逻辑，只编译项目内
+生成的副本，不改共享 IDF。升级 IDF 后若补丁匹配失败，需要重新审查这两处。
+
+构建后运行 `python3 host_tests/test_ws_buffered_read.py` 验证实际编译的读取逻辑。
+开启 `CONFIG_DESK_CLOCK_VOICE_SELF_TEST` 可测试麦克风、播报，以及三次预录的
+“客厅灯开着吗”查询；日常固件应保持关闭。
+
+## 手动设备页
+
+左右滑动到“设备”（小智与耗电之间），点击客厅灯、卧室灯、屏幕挂灯或空调卡片切换电源。
+绿色表示已开启，灰色表示已关闭；操作后回读 HA 确认状态。右上角可刷新，停留时每 15 秒自动同步。
+空调目前仅控制电源，详细模式与温度仍在 HA 设置。
+
+### 本地凭据
+
+首次编译前，将 WiFi、耗电服务和语音服务各自 `include/` 目录下的
+`*_credentials.example.h` 复制为 `*_credentials.h` 并填写本地配置。
+实际凭据文件已加入忽略规则，不随代码提交；现有本地配置保持可用。

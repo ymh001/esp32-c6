@@ -1,6 +1,10 @@
 idf_component_register(
     SRCS
         "clock_ui.cpp"
+        "energy_view.cpp"
+        "xiaozhi_view.cpp"
+        "devices_view.cpp"
+        "fonts/energy_digits_64.c"
         "fonts/clock_cjk_16.c"
         "fonts/clock_cjk_24.c"
         "fonts/clock_cjk_32.c"
@@ -8,6 +12,8 @@ idf_component_register(
     INCLUDE_DIRS "include"
     REQUIRES
         board
+        voice_service
+        ha_devices
         energy_service
         settings
         time_service

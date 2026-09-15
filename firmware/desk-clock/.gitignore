@@ -5,3 +5,10 @@ managed_components/
 dependencies.lock
 firmware_backup/
 *.log
+audit/*.elf
+
+components/voice_service/include/voice_credentials.h
+
+components/wifi_manager/include/wifi_credentials.h
+
+components/energy_service/include/energy_credentials.h

@@ -79,9 +79,10 @@ esp_err_t board_i2c_write_reg(i2c_master_dev_handle_t device, uint8_t reg,
                               const uint8_t *data, size_t len)
 {
     uint8_t buffer[16];
-    if (len + 1 > sizeof(buffer)) {
+    if (len > sizeof(buffer) - 1) {
         return ESP_ERR_INVALID_SIZE;
     }
+    if (device == NULL || (len > 0 && data == NULL)) return ESP_ERR_INVALID_ARG;
     buffer[0] = reg;
     for (size_t i = 0; i < len; ++i) {
         buffer[i + 1] = data[i];
@@ -92,7 +93,8 @@ esp_err_t board_i2c_write_reg(i2c_master_dev_handle_t device, uint8_t reg,
 esp_err_t board_i2c_read_reg(i2c_master_dev_handle_t device, uint8_t reg,
                              uint8_t *data, size_t len)
 {
-    return i2c_master_transmit_receive(device, &reg, 1, data, len, 1000);
+    if (device == NULL || data == NULL || len == 0) return ESP_ERR_INVALID_ARG;
+    return i2c_master_transmit_receive(device, &reg, 1, data, len, 100);
 }
 
 bool board_key_pressed(void)

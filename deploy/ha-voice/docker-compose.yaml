@@ -1,0 +1,40 @@
+name: ha-voice
+services:
+  whisper:
+    image: rhasspy/wyoming-whisper:latest
+    platform: linux/arm64
+    container_name: ha-voice-whisper
+    restart: unless-stopped
+    ports:
+      - "192.168.3.2:10300:10300"
+    volumes:
+      - ./whisper/data:/data
+    environment:
+      TZ: Asia/Shanghai
+    command: ["--model", "base-int8", "--language", "zh", "--beam-size", "1", "--initial-prompt", "以下是普通话简体中文。客厅灯，卧室灯，屏幕挂灯，空调，窗帘，风扇，空气净化器。"]
+    cpus: 4.0
+    mem_limit: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+  piper:
+    image: rhasspy/wyoming-piper:latest
+    platform: linux/arm64
+    container_name: ha-voice-piper
+    restart: unless-stopped
+    ports:
+      - "192.168.3.2:10200:10200"
+    volumes:
+      - ./piper/data:/data
+    environment:
+      TZ: Asia/Shanghai
+    command: ["--voice", "zh_CN-huayan-medium"]
+    cpus: 2.0
+    mem_limit: 1g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

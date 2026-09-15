@@ -5,4 +5,5 @@ idf_component_register(
         esp_http_client
         esp-tls
         json
+        network_gate
 )

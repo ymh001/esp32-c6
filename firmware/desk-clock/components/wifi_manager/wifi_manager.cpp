@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 
+#include <atomic>
 #include <stdio.h>
 #include <string.h>
 
@@ -32,17 +33,22 @@ static const wifi_network_t s_networks[] = {
         .ssid = DESK_CLOCK_WIFI_BACKUP_SSID,
         .password = DESK_CLOCK_WIFI_BACKUP_PASSWORD,
     },
+    {
+        .ssid = DESK_CLOCK_WIFI_THIRD_SSID,
+        .password = DESK_CLOCK_WIFI_THIRD_PASSWORD,
+    },
 };
 
 static const size_t s_network_count = sizeof(s_networks) / sizeof(s_networks[0]);
 
 static esp_netif_t *s_sta_netif;
 static esp_timer_handle_t s_reconnect_timer;
-static volatile wifi_manager_state_t s_state = WIFI_MANAGER_IDLE;
-static volatile bool s_connect_requested;
-static volatile int s_retry_count;
+static std::atomic<wifi_manager_state_t> s_state{WIFI_MANAGER_IDLE};
+static std::atomic<bool> s_connect_requested{false};
+static int s_retry_count;
 static size_t s_network_index;
 static size_t s_network_attempt_count;
+static portMUX_TYPE s_ip_lock = portMUX_INITIALIZER_UNLOCKED;
 static char s_ip[16] = "0.0.0.0";
 
 static void set_state(wifi_manager_state_t state)
@@ -62,7 +68,7 @@ static uint32_t reconnect_delay_ms(void)
 
 static const char *network_role(size_t index)
 {
-    return index == 0 ? "primary" : "backup";
+    return index == 0 ? "primary" : (index == 1 ? "backup" : "third");
 }
 
 static esp_err_t apply_network_config(size_t index)
@@ -160,14 +166,18 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
 
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
-        snprintf(s_ip, sizeof(s_ip), IPSTR, IP2STR(&event->ip_info.ip));
+        char ip[16];
+        snprintf(ip, sizeof(ip), IPSTR, IP2STR(&event->ip_info.ip));
+        portENTER_CRITICAL(&s_ip_lock);
+        memcpy(s_ip, ip, sizeof(s_ip));
+        portEXIT_CRITICAL(&s_ip_lock);
         s_retry_count = 0;
         s_network_attempt_count = 0;
         esp_timer_stop(s_reconnect_timer);
         set_state(WIFI_MANAGER_CONNECTED);
         ESP_LOGI(TAG, "Connected to %s Wi-Fi '%s', IP: %s",
                  network_role(s_network_index), s_networks[s_network_index].ssid,
-                 s_ip);
+                 ip);
     }
 }
 
@@ -193,6 +203,8 @@ static esp_err_t initialize_wifi(void)
     if (err != ESP_OK) {
         return err;
     }
+    err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    if (err != ESP_OK) return err;
     err = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                      wifi_event_handler, NULL);
     if (err != ESP_OK) {
@@ -273,5 +285,7 @@ void wifi_manager_get_ip(char *out, size_t size)
     if (out == NULL || size == 0) {
         return;
     }
+    portENTER_CRITICAL(&s_ip_lock);
     strlcpy(out, s_ip, size);
+    portEXIT_CRITICAL(&s_ip_lock);
 }

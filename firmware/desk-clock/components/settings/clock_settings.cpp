@@ -6,6 +6,8 @@
 #include "esp_log.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static const char *TAG = "settings";
 static const char *NVS_NAMESPACE = "deskclock";
@@ -122,4 +124,46 @@ esp_err_t clock_settings_save(const clock_settings_t *settings)
     if (err == ESP_OK) err = nvs_commit(handle);
     nvs_close(handle);
     return err;
+}
+
+// UI callbacks only publish a copy. NVS writes run from app_main without
+// holding the LVGL lock, and repeated changes collapse to the newest value.
+static portMUX_TYPE s_pending_lock = portMUX_INITIALIZER_UNLOCKED;
+static clock_settings_t s_pending_settings;
+static bool s_save_pending;
+
+void clock_settings_request_save(const clock_settings_t *settings)
+{
+    if (settings == NULL) return;
+    portENTER_CRITICAL(&s_pending_lock);
+    s_pending_settings = *settings;
+    s_save_pending = true;
+    portEXIT_CRITICAL(&s_pending_lock);
+}
+
+void clock_settings_process(void)
+{
+    static TickType_t last_attempt;
+    const TickType_t now = xTaskGetTickCount();
+    if (now - last_attempt < pdMS_TO_TICKS(1000)) return;
+    clock_settings_t pending;
+    portENTER_CRITICAL(&s_pending_lock);
+    const bool save = s_save_pending;
+    if (save) {
+        pending = s_pending_settings;
+        s_save_pending = false;
+    }
+    portEXIT_CRITICAL(&s_pending_lock);
+    if (!save) return;
+    last_attempt = now;
+    const esp_err_t err = clock_settings_save(&pending);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Settings save failed, will retry: %s", esp_err_to_name(err));
+        portENTER_CRITICAL(&s_pending_lock);
+        if (!s_save_pending) {
+            s_pending_settings = pending;
+            s_save_pending = true;
+        }
+        portEXIT_CRITICAL(&s_pending_lock);
+    }
 }

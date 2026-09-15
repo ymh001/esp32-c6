@@ -3,6 +3,9 @@ idf_component_register(
     INCLUDE_DIRS "."
     REQUIRES
         board
+        network_gate
+        ha_devices
+        voice_service
         clock_ui
         energy_service
         settings

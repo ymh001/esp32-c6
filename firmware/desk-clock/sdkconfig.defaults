@@ -16,3 +16,8 @@ CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
 
 # UI screens and draw-task bursts need more than LVGL's 64 KiB default.
 CONFIG_LV_MEM_SIZE_KILOBYTES=96
+
+# Recover from an unrecoverable task stall instead of logging forever.
+CONFIG_ESP_TASK_WDT_PANIC=y
+
+CONFIG_LV_FONT_FMT_TXT_LARGE=y

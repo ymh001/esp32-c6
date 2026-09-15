@@ -23,3 +23,6 @@ esp_err_t clock_settings_init(void);
 void clock_settings_defaults(clock_settings_t *settings);
 esp_err_t clock_settings_load(clock_settings_t *settings);
 esp_err_t clock_settings_save(const clock_settings_t *settings);
+
+void clock_settings_request_save(const clock_settings_t *settings);
+void clock_settings_process(void);
