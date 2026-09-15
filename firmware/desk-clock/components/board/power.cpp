@@ -63,28 +63,29 @@ esp_err_t board_power_init(void)
     }
 
     // ALDO3 powers the panel, ALDO2 the speaker amplifier, ALDO1 the mics.
-    err |= axp_write(0x22, 0x06);
-    err |= axp_write(0x27, 0x10);
-    err |= axp_write(0x80, 0x01);
-    err |= axp_write(0x90, 0x00);
-    err |= axp_write(0x91, 0x00);
-    err |= axp_write(0x82, 18);
-    err |= axp_write(0x92, 28);
-    err |= axp_write(0x93, 28);
-    err |= axp_write(0x94, 28);
-    err |= axp_write(0x95, 28);
-    err |= axp_write(0x90, 0x0f);
-    err |= axp_update(0x30, 0x01, 0x01);
-    err |= axp_update(0x68, 0x01, 0x01);
-    // AXP2101 CV target: 3 = 4.2 V instead of 2 = 4.1 V.
-    err |= axp_write(0x64, 0x03);
-    err |= axp_write(0x61, 0x02);
-    err |= axp_write(0x62, 0x0a);
-    err |= axp_write(0x63, 0x01);
+    const struct {
+        uint8_t reg;
+        uint8_t value;
+    } writes[] = {
+        {0x22, 0x06}, {0x27, 0x10}, {0x80, 0x01}, {0x90, 0x00},
+        {0x91, 0x00}, {0x82, 18},   {0x92, 28},   {0x93, 28},
+        {0x94, 28},   {0x95, 28},   {0x90, 0x0f}, {0x64, 0x03},
+        {0x61, 0x02}, {0x62, 0x0a}, {0x63, 0x01},
+    };
+    for (const auto &write : writes) {
+        err = axp_write(write.reg, write.value);
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+    err = axp_update(0x30, 0x01, 0x01);
     if (err != ESP_OK) {
         return err;
     }
-
+    err = axp_update(0x68, 0x01, 0x01);
+    if (err != ESP_OK) {
+        return err;
+    }
     vTaskDelay(pdMS_TO_TICKS(50));
     return ESP_OK;
 }
@@ -111,10 +112,11 @@ esp_err_t board_power_get_battery(uint8_t *percent, uint16_t *voltage_mv)
         voltage_err = board_i2c_read_reg(s_pmic, 0x35, &low, 1);
     }
 
+    if (voltage_err != ESP_OK) {
+        return voltage_err;
+    }
     const uint16_t voltage =
-        voltage_err == ESP_OK
-            ? (uint16_t)(((uint16_t)(high & 0x1F) << 8) | low)
-            : 0;
+        (uint16_t)(((uint16_t)(high & 0x1F) << 8) | low);
     if (percent != NULL) {
         *percent = voltage >= 3000 ? battery_percent_from_voltage(voltage)
                                    : 0;
@@ -129,10 +131,13 @@ esp_err_t board_display_reset(void)
 {
     // There is no dedicated LCD reset GPIO on this board.
     esp_err_t err = axp_update(0x90, 0x04, 0x04);
+    if (err != ESP_OK) return err;
     vTaskDelay(pdMS_TO_TICKS(100));
-    err |= axp_update(0x90, 0x04, 0x00);
+    err = axp_update(0x90, 0x04, 0x00);
+    if (err != ESP_OK) return err;
     vTaskDelay(pdMS_TO_TICKS(100));
-    err |= axp_update(0x90, 0x04, 0x04);
+    err = axp_update(0x90, 0x04, 0x04);
+    if (err != ESP_OK) return err;
     vTaskDelay(pdMS_TO_TICKS(100));
-    return err;
+    return ESP_OK;
 }

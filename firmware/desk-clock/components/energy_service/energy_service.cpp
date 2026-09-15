@@ -396,14 +396,29 @@ static void energy_task(void *arg)
 
 esp_err_t energy_service_start(void)
 {
+    if (s_snapshot_mutex != NULL && s_events != NULL) {
+        return ESP_OK;
+    }
     s_snapshot_mutex = xSemaphoreCreateMutex();
     s_events = xEventGroupCreate();
     if (s_snapshot_mutex == NULL || s_events == NULL) {
+        if (s_snapshot_mutex != NULL) {
+            vSemaphoreDelete(s_snapshot_mutex);
+            s_snapshot_mutex = NULL;
+        }
+        if (s_events != NULL) {
+            vEventGroupDelete(s_events);
+            s_events = NULL;
+        }
         return ESP_ERR_NO_MEM;
     }
     strlcpy(s_snapshot.message, "等待更新", sizeof(s_snapshot.message));
 
     if (xTaskCreate(energy_task, "energy", 12288, NULL, 4, NULL) != pdPASS) {
+        vSemaphoreDelete(s_snapshot_mutex);
+        vEventGroupDelete(s_events);
+        s_snapshot_mutex = NULL;
+        s_events = NULL;
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;

@@ -40,7 +40,7 @@ esp_err_t board_display_init(board_display_t *display)
     bus_config.data2_io_num = BOARD_LCD_D2_GPIO;
     bus_config.data3_io_num = BOARD_LCD_D3_GPIO;
     bus_config.max_transfer_sz =
-        BOARD_LCD_H_RES * 50 * sizeof(uint16_t);
+        BOARD_LCD_H_RES * 84 * sizeof(uint16_t);
     ESP_RETURN_ON_ERROR(
         spi_bus_initialize(SPI2_HOST, &bus_config, SPI_DMA_CH_AUTO), TAG,
         "SPI init failed");

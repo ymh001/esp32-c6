@@ -32,6 +32,7 @@ extern "C" void app_main(void)
 
     bool key_was_pressed = false;
     bool time_sync_started = false;
+    TickType_t last_rotation_poll = 0;
 
     ESP_LOGI(TAG, "Desk clock started");
 
@@ -56,6 +57,12 @@ extern "C" void app_main(void)
             clock_ui_toggle_view();
         }
         key_was_pressed = key_pressed;
+
+        const TickType_t now = xTaskGetTickCount();
+        if (now - last_rotation_poll >= pdMS_TO_TICKS(100)) {
+            last_rotation_poll = now;
+            clock_ui_auto_rotate_update();
+        }
 
         vTaskDelay(pdMS_TO_TICKS(20));
     }

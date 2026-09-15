@@ -1,6 +1,8 @@
 idf_component_register(
     SRCS
         "board.cpp"
+        "imu.cpp"
+        "orientation_math.cpp"
         "display.cpp"
         "power.cpp"
         "rtc.cpp"

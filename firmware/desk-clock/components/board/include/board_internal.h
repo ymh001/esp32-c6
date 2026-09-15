@@ -17,6 +17,7 @@ esp_err_t board_i2c_read_reg(i2c_master_dev_handle_t device, uint8_t reg,
 esp_err_t board_power_init(void);
 esp_err_t board_display_init(board_display_t *display);
 esp_err_t board_display_reset(void);
+esp_err_t board_imu_init(void);
 esp_err_t board_rtc_init(void);
 esp_err_t board_buttons_init(void);
 

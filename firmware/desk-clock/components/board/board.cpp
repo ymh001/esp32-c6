@@ -127,7 +127,8 @@ esp_err_t board_init(void)
 
     err = board_display_init(&s_display);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Display init failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Display init failed: %s", esp_err_to_name(err));
+        return err;
     }
 
     err = board_rtc_init();
@@ -139,6 +140,12 @@ esp_err_t board_init(void)
     err = board_buttons_init();
     if (err != ESP_OK) {
         return err;
+    }
+
+    err = board_imu_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "IMU init failed, auto rotation disabled: %s",
+                 esp_err_to_name(err));
     }
 
     if (s_display.panel_io != NULL) {
