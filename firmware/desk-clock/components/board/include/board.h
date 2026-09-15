@@ -31,6 +31,13 @@ extern "C" {
 
 #define BOARD_KEY_GPIO 10
 
+typedef enum {
+    BOARD_ROTATION_0 = 0,
+    BOARD_ROTATION_90,
+    BOARD_ROTATION_180,
+    BOARD_ROTATION_270,
+} board_rotation_t;
+
 typedef struct {
     esp_lcd_panel_handle_t panel;
     esp_lcd_panel_io_handle_t panel_io;
@@ -46,6 +53,7 @@ esp_err_t board_rtc_read(struct tm *out);
 esp_err_t board_rtc_write(const struct tm *value);
 
 bool board_key_pressed(void);
+esp_err_t board_auto_rotation_update(void);
 
 #ifdef __cplusplus
 }

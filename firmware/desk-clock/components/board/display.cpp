@@ -9,6 +9,58 @@
 
 static const char *TAG = "display";
 
+#define LCD_CMD_MADCTL_WRITE 0x36
+#define LCD_CMD_WRITE_FLAG (0x02UL << 24)
+
+static volatile board_rotation_t s_rotation = BOARD_ROTATION_0;
+
+static uint8_t madctl_for_rotation(board_rotation_t rotation)
+{
+    switch (rotation) {
+    case BOARD_ROTATION_90:
+        return 0x70;
+    case BOARD_ROTATION_180:
+        return 0xF0;
+    case BOARD_ROTATION_270:
+        return 0xB0;
+    default:
+        return 0x30;
+    }
+}
+
+static void process_touch_coordinates(esp_lcd_touch_handle_t tp, uint16_t *x,
+                                      uint16_t *y, uint16_t *strength,
+                                      uint8_t *point_num,
+                                      uint8_t max_point_num)
+{
+    (void)strength;
+    (void)max_point_num;
+    const uint16_t x_max = tp->config.x_max;
+    const uint16_t y_max = tp->config.y_max;
+    for (uint8_t i = 0; i < *point_num; ++i) {
+        const uint16_t raw_x = x[i];
+        const uint16_t raw_y = y[i];
+        switch (s_rotation) {
+        case BOARD_ROTATION_90:
+            x[i] = raw_x;
+            y[i] = raw_y;
+            break;
+        case BOARD_ROTATION_180:
+            x[i] = raw_y;
+            y[i] = x_max - raw_x;
+            break;
+        case BOARD_ROTATION_270:
+            x[i] = x_max - raw_x;
+            y[i] = y_max - raw_y;
+            break;
+        default:
+            x[i] = y_max - raw_y;
+            y[i] = raw_x;
+            break;
+        }
+    }
+}
+
 static const sh8601_lcd_init_cmd_t s_lcd_init_cmds[] = {
     {0x11, (uint8_t[]){0x00}, 0, 600},
     {0xFE, (uint8_t[]){0x20}, 1, 0},
@@ -99,9 +151,10 @@ esp_err_t board_display_init(board_display_t *display)
         (gpio_num_t)BOARD_TOUCH_INT_GPIO;
     touch_config.levels.reset = 0;
     touch_config.levels.interrupt = 0;
-    touch_config.flags.swap_xy = 1;
+    touch_config.flags.swap_xy = 0;
     touch_config.flags.mirror_x = 0;
-    touch_config.flags.mirror_y = 1;
+    touch_config.flags.mirror_y = 0;
+    touch_config.process_coordinates = process_touch_coordinates;
     esp_lcd_panel_io_handle_t touch_io = NULL;
     esp_lcd_panel_io_i2c_config_t touch_io_config =
         ESP_LCD_TOUCH_IO_I2C_CST9217_CONFIG();
@@ -118,6 +171,24 @@ esp_err_t board_display_init(board_display_t *display)
 
     ESP_LOGI(TAG, "Display and touch initialized");
     return ESP_OK;
+}
+
+esp_err_t board_display_set_rotation(board_rotation_t rotation)
+{
+    const board_display_t *display = board_display();
+    if (display == NULL || display->panel_io == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const uint8_t madctl = madctl_for_rotation(rotation);
+    const uint32_t command = ((uint32_t)LCD_CMD_MADCTL_WRITE << 8) |
+                             LCD_CMD_WRITE_FLAG;
+    const esp_err_t err = esp_lcd_panel_io_tx_param(
+        display->panel_io, command, &madctl, sizeof(madctl));
+    if (err == ESP_OK) {
+        s_rotation = rotation;
+    }
+    return err;
 }
 
 void board_set_backlight(uint8_t percent)

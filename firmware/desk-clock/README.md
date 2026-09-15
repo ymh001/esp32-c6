@@ -17,6 +17,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 - Electricity page with today, current week, current month, and remaining kWh.
 - Automatic electricity refresh every hour plus a manual refresh.
 - NVS persistence for local clock preferences.
+- Automatic four-way screen rotation based on the onboard QMI8658
+  accelerometer, including touch-coordinate rotation.
 - Automatic day and night brightness.
 - Two-pixel QSPI redraw alignment to prevent sheared or slanted partial updates.
 - A rounded-screen safe layout for the calendar controls and grid.
@@ -35,6 +37,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
   below.
 - Press KEY (GPIO10) as an optional hardware shortcut to toggle between the
   main pages.
+- Rotate the device in 90-degree steps; the display and touch input follow the
+  current upright orientation after a short debounce.
 
 ## Wi-Fi Configuration
 

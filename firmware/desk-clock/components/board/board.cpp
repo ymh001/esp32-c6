@@ -141,6 +141,12 @@ esp_err_t board_init(void)
         return err;
     }
 
+    err = board_imu_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "IMU init failed, auto rotation disabled: %s",
+                 esp_err_to_name(err));
+    }
+
     if (s_display.panel_io != NULL) {
         board_set_backlight(80);
     }

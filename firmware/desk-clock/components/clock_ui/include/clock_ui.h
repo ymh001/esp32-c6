@@ -6,3 +6,4 @@
 esp_err_t clock_ui_start(const clock_settings_t *settings);
 void clock_ui_toggle_view(void);
 void clock_ui_show_clock(void);
+void clock_ui_auto_rotate_update(void);

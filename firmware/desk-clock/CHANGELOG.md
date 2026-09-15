@@ -19,6 +19,10 @@
 - Centralized primary/backup SSIDs and passwords in `wifi_credentials.h`.
 - Added automatic failover between the primary and backup networks after
   repeated connection failures.
+- Added automatic four-way display and touch rotation using the QMI8658
+  accelerometer.
+- Removed transition animations when opening the control page, so page changes
+  refresh immediately.
 - Added automatic reconnect with capped backoff.
 - Start SNTP only after the device obtains a Wi-Fi address.
 
@@ -35,6 +39,9 @@
   month.
 - Replaced the partial CJK font subset with source-generated fonts covering all
   current UI and lunar text, eliminating missing-glyph boxes.
+- Reused the rendered calendar instead of rebuilding it when switching pages,
+  and increased the LVGL draw buffer when memory permits to reduce visible
+  top-to-bottom refreshes.
 
 ## 2026-09-14
 

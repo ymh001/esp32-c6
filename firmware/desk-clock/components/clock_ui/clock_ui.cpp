@@ -7,6 +7,7 @@
 #include "board.h"
 #include "energy_service.h"
 #include "esp_check.h"
+#include "esp_heap_caps.h"
 #include "esp_lv_adapter.h"
 #include "esp_log.h"
 #include "lunar.h"
@@ -45,6 +46,11 @@ typedef struct {
     lv_obj_t *week_name_labels[7];
     lv_obj_t *week_day_labels[7];
     lv_obj_t *week_lunar_labels[7];
+    lv_obj_t *calendar_cells[42];
+    int calendar_cell_year[42];
+    int calendar_cell_month[42];
+    int calendar_cell_day[42];
+    bool calendar_cell_in_month[42];
     lv_obj_t *energy_value_labels[4];
     lv_obj_t *energy_status_label;
     lv_obj_t *control_panel;
@@ -59,6 +65,9 @@ typedef struct {
     int week_anchor_year;
     int week_anchor_month;
     int week_anchor_day;
+    int calendar_today_year;
+    int calendar_today_month;
+    int calendar_today_day;
 } ui_state_t;
 
 static ui_state_t s_ui;
@@ -125,12 +134,6 @@ static void show_main_page(main_page_t page)
     if (page == MAIN_PAGE_CLOCK) {
         lv_screen_load(s_ui.clock_screen);
     } else if (page == MAIN_PAGE_CALENDAR) {
-        time_t now = time(NULL);
-        struct tm local = {0};
-        localtime_r(&now, &local);
-        s_ui.displayed_year = local.tm_year + 1900;
-        s_ui.displayed_month = local.tm_mon + 1;
-        clock_ui_render_calendar(s_ui.displayed_year, s_ui.displayed_month);
         lv_screen_load(s_ui.calendar_screen);
     } else {
         lv_screen_load(s_ui.energy_screen);
@@ -155,29 +158,9 @@ static void show_control_screen(void)
         s_ui.previous_page = s_ui.current_page;
     }
     lv_anim_delete(s_ui.control_panel, NULL);
-    lv_obj_set_y(s_ui.control_panel, 28);
-    lv_obj_set_style_opa(s_ui.control_panel, LV_OPA_TRANSP, 0);
+    lv_obj_set_y(s_ui.control_panel, 0);
+    lv_obj_set_style_opa(s_ui.control_panel, LV_OPA_COVER, 0);
     lv_screen_load(s_ui.control_screen);
-
-    lv_anim_t animation;
-    lv_anim_init(&animation);
-    lv_anim_set_var(&animation, s_ui.control_panel);
-    lv_anim_set_exec_cb(&animation, (lv_anim_exec_xcb_t)lv_obj_set_y);
-    lv_anim_set_values(&animation, 28, 0);
-    lv_anim_set_duration(&animation, 220);
-    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
-    lv_anim_start(&animation);
-
-    lv_anim_init(&animation);
-    lv_anim_set_var(&animation, s_ui.control_panel);
-    lv_anim_set_exec_cb(
-        &animation, [](void *object, int32_t opacity) {
-            lv_obj_set_style_opa((lv_obj_t *)object, (lv_opa_t)opacity, 0);
-        });
-    lv_anim_set_values(&animation, LV_OPA_TRANSP, LV_OPA_COVER);
-    lv_anim_set_duration(&animation, 220);
-    lv_anim_set_path_cb(&animation, lv_anim_path_ease_out);
-    lv_anim_start(&animation);
 }
 
 static void close_control_screen(void)
@@ -283,6 +266,34 @@ static void update_week_strip(const struct tm *local)
     }
 }
 
+static void update_calendar_today_styles(void)
+{
+    time_t now = time(NULL);
+    struct tm today = {0};
+    localtime_r(&now, &today);
+    const int today_year = today.tm_year + 1900;
+    const int today_month = today.tm_mon + 1;
+    const int today_day = today.tm_mday;
+
+    for (int index = 0; index < 42; ++index) {
+        const bool is_today = s_ui.calendar_cell_year[index] == today_year &&
+                              s_ui.calendar_cell_month[index] == today_month &&
+                              s_ui.calendar_cell_day[index] == today_day;
+        lv_obj_set_style_border_width(s_ui.calendar_cells[index],
+                                      is_today ? 2 : 1, 0);
+        lv_obj_set_style_border_color(
+            s_ui.calendar_cells[index],
+            is_today ? lv_color_hex(0xF3A712) : lv_color_hex(0x252C37), 0);
+        lv_obj_set_style_bg_color(
+            s_ui.calendar_cells[index],
+            is_today ? lv_color_hex(0x2A2110) : lv_color_hex(0x10141B), 0);
+    }
+
+    s_ui.calendar_today_year = today_year;
+    s_ui.calendar_today_month = today_month;
+    s_ui.calendar_today_day = today_day;
+}
+
 static void render_calendar(int year, int month)
 {
     char title[32];
@@ -337,17 +348,11 @@ static void render_calendar(int year, int month)
         lv_obj_set_style_bg_color(cell, lv_color_hex(0x10141B), 0);
 
         const bool in_current_month = current_month == month;
-        const time_t now = time(NULL);
-        struct tm local = {0};
-        localtime_r(&now, &local);
-        const bool today = current_year == local.tm_year + 1900 &&
-                           current_month == local.tm_mon + 1 &&
-                           current_day == local.tm_mday;
-        if (today) {
-            lv_obj_set_style_border_width(cell, 2, 0);
-            lv_obj_set_style_border_color(cell, lv_color_hex(0xF3A712), 0);
-            lv_obj_set_style_bg_color(cell, lv_color_hex(0x2A2110), 0);
-        }
+        s_ui.calendar_cells[index] = cell;
+        s_ui.calendar_cell_year[index] = current_year;
+        s_ui.calendar_cell_month[index] = current_month;
+        s_ui.calendar_cell_day[index] = current_day;
+        s_ui.calendar_cell_in_month[index] = in_current_month;
 
         char day_text[16];
         snprintf(day_text, sizeof(day_text), "%d", current_day);
@@ -365,6 +370,8 @@ static void render_calendar(int year, int month)
                                         : lv_color_hex(0x444B56));
         lv_obj_align(lunar_label, LV_ALIGN_BOTTOM_MID, 0, -3);
     }
+
+    update_calendar_today_styles();
 }
 
 static void update_clock(void)
@@ -428,10 +435,12 @@ static void update_clock(void)
     lv_label_set_text(s_ui.status_label, status);
     update_week_strip(&local);
 
-    if (s_ui.calendar_screen != NULL && lv_screen_active() == s_ui.calendar_screen &&
-        (s_ui.displayed_year != local.tm_year + 1900 ||
-         s_ui.displayed_month != local.tm_mon + 1)) {
-        clock_ui_render_calendar(s_ui.displayed_year, s_ui.displayed_month);
+    if (s_ui.calendar_screen != NULL &&
+        lv_screen_active() == s_ui.calendar_screen &&
+        (s_ui.calendar_today_year != local.tm_year + 1900 ||
+         s_ui.calendar_today_month != local.tm_mon + 1 ||
+         s_ui.calendar_today_day != local.tm_mday)) {
+        update_calendar_today_styles();
     }
 
     int brightness = s_ui_settings.brightness;
@@ -842,6 +851,30 @@ void clock_ui_render_calendar(int year, int month)
     render_calendar(year, month);
 }
 
+static lv_display_t *register_display(const board_display_t *display)
+{
+    const size_t bytes_per_row = BOARD_LCD_H_RES * sizeof(uint16_t);
+    const size_t free_block = heap_caps_get_largest_free_block(
+        MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+    uint16_t buffer_height = 80;
+    if (free_block >= 280U * 1024U) {
+        buffer_height = 240;
+    } else if (free_block >= 190U * 1024U) {
+        buffer_height = 160;
+    } else if (free_block >= 150U * 1024U) {
+        buffer_height = 120;
+    }
+
+    esp_lv_adapter_display_config_t display_config =
+        ESP_LV_ADAPTER_DISPLAY_SPI_WITHOUT_PSRAM_DEFAULT_CONFIG(
+            display->panel, display->panel_io, BOARD_LCD_H_RES,
+            BOARD_LCD_V_RES, ESP_LV_ADAPTER_ROTATE_0);
+    display_config.profile.buffer_height = buffer_height;
+    ESP_LOGI(TAG, "Display buffer height: %u (%u bytes/row, free DMA block: %u)",
+             buffer_height, (unsigned)bytes_per_row, (unsigned)free_block);
+    return esp_lv_adapter_register_display(&display_config);
+}
+
 esp_err_t clock_ui_start(const clock_settings_t *settings)
 {
     if (settings == NULL) {
@@ -859,12 +892,7 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
                         "LVGL adapter init");
 
     const board_display_t *display = board_display();
-    esp_lv_adapter_display_config_t display_config =
-        ESP_LV_ADAPTER_DISPLAY_SPI_WITHOUT_PSRAM_DEFAULT_CONFIG(
-            display->panel, display->panel_io, BOARD_LCD_H_RES,
-            BOARD_LCD_V_RES, ESP_LV_ADAPTER_ROTATE_0);
-    display_config.profile.buffer_height = 80;
-    s_lv_display = esp_lv_adapter_register_display(&display_config);
+    s_lv_display = register_display(display);
     if (s_lv_display == NULL) {
         return ESP_FAIL;
     }
@@ -889,6 +917,12 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
         build_calendar_screen();
         build_energy_screen();
         build_control_screen();
+        time_t now = time(NULL);
+        struct tm local = {0};
+        localtime_r(&now, &local);
+        s_ui.displayed_year = local.tm_year + 1900;
+        s_ui.displayed_month = local.tm_mon + 1;
+        render_calendar(s_ui.displayed_year, s_ui.displayed_month);
         show_main_page(MAIN_PAGE_CLOCK);
         update_clock();
         lv_timer_create(clock_timer, 1000, NULL);
@@ -920,5 +954,14 @@ void clock_ui_show_clock(void)
     if (s_ui.clock_screen != NULL) {
         show_main_page(MAIN_PAGE_CLOCK);
     }
+    esp_lv_adapter_unlock();
+}
+
+void clock_ui_auto_rotate_update(void)
+{
+    if (esp_lv_adapter_lock(-1) != ESP_OK) {
+        return;
+    }
+    board_auto_rotation_update();
     esp_lv_adapter_unlock();
 }
