@@ -2,6 +2,10 @@
 
 ## 2026-09-15
 
+- Increased the LVGL memory pool to 96 KiB to handle UI draw-task bursts.
+- Start electricity requests only after Wi-Fi and time synchronization are ready.
+- Added host tests for physical orientation detection.
+
 ### Changed
 
 - Added an electricity page with today, week, month, and remaining kWh.
@@ -42,8 +46,8 @@
 - Replaced the partial CJK font subset with source-generated fonts covering all
   current UI and lunar text, eliminating missing-glyph boxes.
 - Reused the rendered calendar instead of rebuilding it when switching pages,
-  and increased the LVGL draw buffer when memory permits to reduce visible
-  top-to-bottom refreshes.
+  and use 32-row display strips with a bounded software-rotation buffer to
+  leave memory available for network requests.
 
 ## 2026-09-14
 

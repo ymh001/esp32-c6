@@ -127,7 +127,8 @@ esp_err_t board_init(void)
 
     err = board_display_init(&s_display);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Display init failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Display init failed: %s", esp_err_to_name(err));
+        return err;
     }
 
     err = board_rtc_init();

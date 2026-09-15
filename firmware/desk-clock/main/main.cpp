@@ -32,6 +32,7 @@ extern "C" void app_main(void)
 
     bool key_was_pressed = false;
     bool time_sync_started = false;
+    bool energy_started = false;
     TickType_t last_rotation_poll = 0;
 
     ESP_LOGI(TAG, "Desk clock started");
@@ -41,14 +42,20 @@ extern "C" void app_main(void)
             const esp_err_t time_error = time_service_start();
             if (time_error == ESP_OK) {
                 time_sync_started = true;
-                const esp_err_t energy_error = energy_service_start();
-                if (energy_error != ESP_OK) {
-                    ESP_LOGW(TAG, "Unable to start energy service: %s",
-                             esp_err_to_name(energy_error));
-                }
             } else {
                 ESP_LOGW(TAG, "Unable to start time synchronization: %s",
                          esp_err_to_name(time_error));
+            }
+        }
+
+        if (!energy_started && wifi_manager_is_connected() &&
+            time_service_is_synced()) {
+            const esp_err_t energy_error = energy_service_start();
+            if (energy_error == ESP_OK) {
+                energy_started = true;
+            } else {
+                ESP_LOGW(TAG, "Unable to start energy service: %s",
+                         esp_err_to_name(energy_error));
             }
         }
 

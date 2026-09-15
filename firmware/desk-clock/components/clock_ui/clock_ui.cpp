@@ -79,6 +79,85 @@ static const lv_font_t *s_cjk_date_font = &clock_cjk_32;
 static const lv_font_t *s_cjk_clock_font = &clock_cjk_96;
 static uint32_t s_last_view_switch_tick;
 
+// LVGL renders in strips because this ESP32-C6 has no PSRAM. A 90/270-degree
+// pose turns an 84-row strip into an 84-column QSPI transfer. Keep one DMA-safe
+// scratch strip; LVGL does not submit the next partial flush until the panel IO
+// completion callback marks the current one ready.
+#define ROTATION_STRIP_ROWS 32
+#define ROTATION_GUARD_ROWS 4
+#define ROTATION_MAX_PIXELS \
+    (BOARD_LCD_H_RES * (ROTATION_STRIP_ROWS + ROTATION_GUARD_ROWS))
+
+static uint16_t *s_rotation_buffer;
+static size_t s_rotation_buffer_pixels;
+
+static void rotation_flush(lv_display_t *display, const lv_area_t *area,
+                           uint8_t *pixel_map)
+{
+    const board_display_t *board = board_display();
+    if (board == NULL || board->panel == NULL) {
+        lv_display_flush_ready(display);
+        return;
+    }
+
+    const int32_t source_width = lv_area_get_width(area);
+    const int32_t source_height = lv_area_get_height(area);
+    if (source_width <= 0 || source_height <= 0) {
+        lv_display_flush_ready(display);
+        return;
+    }
+
+    lv_area_t output_area = *area;
+    uint8_t *output = pixel_map;
+    const lv_display_rotation_t rotation = lv_display_get_rotation(display);
+    if (rotation != LV_DISPLAY_ROTATION_0) {
+        const size_t pixels = (size_t)source_width * (size_t)source_height;
+        if (s_rotation_buffer == NULL || pixels > s_rotation_buffer_pixels) {
+            ESP_LOGE(TAG,
+                     "Rotation strip overflow: %dx%d=%u pixels, capacity=%u",
+                     (int)source_width, (int)source_height, (unsigned)pixels,
+                     (unsigned)s_rotation_buffer_pixels);
+            lv_display_flush_ready(display);
+            return;
+        }
+
+        lv_display_rotate_area(display, &output_area);
+        const uint32_t source_stride =
+            lv_draw_buf_width_to_stride(source_width, LV_COLOR_FORMAT_RGB565);
+        const uint32_t output_stride = lv_draw_buf_width_to_stride(
+            lv_area_get_width(&output_area), LV_COLOR_FORMAT_RGB565);
+        lv_draw_sw_rotate(pixel_map, s_rotation_buffer, source_width,
+                          source_height, source_stride, output_stride, rotation,
+                          LV_COLOR_FORMAT_RGB565);
+        output = (uint8_t *)s_rotation_buffer;
+    }
+
+    // The panel expects byte-swapped RGB565. The buffer remains owned until the
+    // existing esp_lvgl_adapter panel-IO completion callback calls flush_ready.
+    lv_draw_sw_rgb565_swap(output, lv_area_get_size(&output_area));
+    const esp_err_t err = esp_lcd_panel_draw_bitmap(
+        board->panel, output_area.x1, output_area.y1, output_area.x2 + 1,
+        output_area.y2 + 1, output);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Panel flush failed: %s", esp_err_to_name(err));
+        lv_display_flush_ready(display);
+    }
+}
+
+static lv_display_rotation_t lv_rotation_for_pose(board_rotation_t rotation)
+{
+    switch (rotation) {
+    case BOARD_ROTATION_90:
+        return LV_DISPLAY_ROTATION_90;
+    case BOARD_ROTATION_180:
+        return LV_DISPLAY_ROTATION_180;
+    case BOARD_ROTATION_270:
+        return LV_DISPLAY_ROTATION_270;
+    default:
+        return LV_DISPLAY_ROTATION_0;
+    }
+}
+
 void clock_ui_render_calendar(int year, int month);
 
 static int days_in_month(int year, int month)
@@ -521,6 +600,16 @@ static void clock_timer(lv_timer_t *timer)
         battery_countdown = 5;
         update_battery_view();
     }
+
+    static int memory_countdown;
+    if (memory_countdown-- <= 0) {
+        memory_countdown = 30;
+        lv_mem_monitor_t monitor = {};
+        lv_mem_monitor(&monitor);
+        ESP_LOGI(TAG, "LVGL memory: %u%% used, %u free, %u largest, %u%% fragmented",
+                 monitor.used_pct, (unsigned)monitor.free_size,
+                 (unsigned)monitor.free_biggest_size, monitor.frag_pct);
+    }
 }
 
 static void build_clock_screen(void)
@@ -617,51 +706,12 @@ static void brightness_changed(lv_event_t *event)
     lv_label_set_text(s_ui.brightness_value_label, text);
 }
 
-static void update_brightness_from_pointer(lv_event_t *event)
+static void brightness_released(lv_event_t *event)
 {
-    lv_indev_t *indev = lv_event_get_indev(event);
-    if (indev == NULL || s_ui.brightness_slider == NULL) {
-        return;
-    }
-
-    lv_point_t point;
-    lv_indev_get_point(indev, &point);
-
-    lv_area_t slider_area;
-    lv_obj_get_coords(s_ui.brightness_slider, &slider_area);
-    const int32_t width = lv_area_get_width(&slider_area);
-    if (width <= 0) {
-        return;
-    }
-
-    int32_t position = point.x - slider_area.x1;
-    if (position < 0) {
-        position = 0;
-    } else if (position > width) {
-        position = width;
-    }
-
-    const int minimum = lv_slider_get_min_value(s_ui.brightness_slider);
-    const int maximum = lv_slider_get_max_value(s_ui.brightness_slider);
-    const int value =
-        minimum + (int)((int64_t)(maximum - minimum) * position / width);
-    if (value != lv_slider_get_value(s_ui.brightness_slider)) {
-        lv_slider_set_value(s_ui.brightness_slider, value, LV_ANIM_OFF);
-    }
-}
-
-static void brightness_touch_event(lv_event_t *event)
-{
-    const lv_event_code_t code = lv_event_get_code(event);
-    if (code == LV_EVENT_PRESSED || code == LV_EVENT_PRESSING ||
-        code == LV_EVENT_RELEASED) {
-        update_brightness_from_pointer(event);
-    }
-    if (code == LV_EVENT_RELEASED || code == LV_EVENT_PRESS_LOST) {
-        ESP_LOGI(TAG, "Brightness: %d%%",
-                 lv_slider_get_value(s_ui.brightness_slider));
-        clock_settings_save(&s_ui_settings);
-    }
+    (void)event;
+    ESP_LOGI(TAG, "Brightness: %d%%",
+             lv_slider_get_value(s_ui.brightness_slider));
+    clock_settings_save(&s_ui_settings);
 }
 
 static void build_energy_screen(void)
@@ -780,14 +830,9 @@ static void build_control_screen(void)
                             LV_PART_KNOB);
     lv_obj_add_event_cb(s_ui.brightness_slider, brightness_changed,
                         LV_EVENT_VALUE_CHANGED, NULL);
-    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
-                        LV_EVENT_PRESSED, NULL);
-    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
-                        LV_EVENT_PRESSING, NULL);
-    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
+    lv_obj_clear_flag(s_ui.brightness_slider, LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_released,
                         LV_EVENT_RELEASED, NULL);
-    lv_obj_add_event_cb(s_ui.brightness_slider, brightness_touch_event,
-                        LV_EVENT_PRESS_LOST, NULL);
 
     s_ui.brightness_value_label =
         make_label(s_ui.control_panel, "80%", s_cjk_title_font,
@@ -853,26 +898,34 @@ void clock_ui_render_calendar(int year, int month)
 
 static lv_display_t *register_display(const board_display_t *display)
 {
-    const size_t bytes_per_row = BOARD_LCD_H_RES * sizeof(uint16_t);
-    const size_t free_block = heap_caps_get_largest_free_block(
+    s_rotation_buffer_pixels = ROTATION_MAX_PIXELS;
+    s_rotation_buffer = (uint16_t *)heap_caps_malloc(
+        s_rotation_buffer_pixels * sizeof(uint16_t),
         MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
-    uint16_t buffer_height = 80;
-    if (free_block >= 280U * 1024U) {
-        buffer_height = 240;
-    } else if (free_block >= 190U * 1024U) {
-        buffer_height = 160;
-    } else if (free_block >= 150U * 1024U) {
-        buffer_height = 120;
+    if (s_rotation_buffer == NULL) {
+        ESP_LOGE(TAG, "Unable to allocate %u-byte rotation strip",
+                 (unsigned)(s_rotation_buffer_pixels * sizeof(uint16_t)));
+        return NULL;
     }
 
     esp_lv_adapter_display_config_t display_config =
         ESP_LV_ADAPTER_DISPLAY_SPI_WITHOUT_PSRAM_DEFAULT_CONFIG(
             display->panel, display->panel_io, BOARD_LCD_H_RES,
             BOARD_LCD_V_RES, ESP_LV_ADAPTER_ROTATE_0);
-    display_config.profile.buffer_height = buffer_height;
-    ESP_LOGI(TAG, "Display buffer height: %u (%u bytes/row, free DMA block: %u)",
-             buffer_height, (unsigned)bytes_per_row, (unsigned)free_block);
-    return esp_lv_adapter_register_display(&display_config);
+    display_config.profile.buffer_height = ROTATION_STRIP_ROWS;
+    lv_display_t *lv_display = esp_lv_adapter_register_display(&display_config);
+    if (lv_display == NULL) {
+        heap_caps_free(s_rotation_buffer);
+        s_rotation_buffer = NULL;
+        s_rotation_buffer_pixels = 0;
+        return NULL;
+    }
+
+    lv_display_set_flush_cb(lv_display, rotation_flush);
+    ESP_LOGI(TAG, "Display strip: %u rows; rotation scratch: %u bytes",
+             ROTATION_STRIP_ROWS,
+             (unsigned)(s_rotation_buffer_pixels * sizeof(uint16_t)));
+    return lv_display;
 }
 
 esp_err_t clock_ui_start(const clock_settings_t *settings)
@@ -959,14 +1012,19 @@ void clock_ui_show_clock(void)
 
 void clock_ui_auto_rotate_update(void)
 {
-    if (esp_lv_adapter_lock(-1) != ESP_OK) {
+    board_rotation_t rotation = BOARD_ROTATION_0;
+    bool changed = false;
+    const esp_err_t err = board_auto_rotation_update(&rotation, &changed);
+    if (err != ESP_OK || !changed || s_lv_display == NULL) {
         return;
     }
-    bool rotation_changed = false;
-    if (board_auto_rotation_update(&rotation_changed) == ESP_OK &&
-        rotation_changed && s_lv_display != NULL) {
-        lv_obj_invalidate(lv_screen_active());
-        esp_lv_adapter_refresh_now(s_lv_display);
+
+    if (esp_lv_adapter_lock(100) != ESP_OK) {
+        return;
     }
+    lv_display_set_rotation(s_lv_display, lv_rotation_for_pose(rotation));
+    lv_obj_invalidate(lv_screen_active());
+    ESP_LOGI(TAG, "UI orientation set to %s degrees",
+             board_rotation_name(rotation));
     esp_lv_adapter_unlock();
 }

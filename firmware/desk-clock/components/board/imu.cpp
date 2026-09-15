@@ -1,7 +1,5 @@
 #include "board_internal.h"
 
-#include <math.h>
-
 #include "esp_check.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -21,16 +19,14 @@ static const char *TAG = "imu";
 #define QMI8658_ACCEL_LSB_PER_G 16384.0f
 
 #define ORIENTATION_FILTER_ALPHA 0.25f
-#define ORIENTATION_STABLE_SAMPLES 3
-#define FLAT_MIN_ABS_Z 0.75f
+#define ORIENTATION_STABLE_SAMPLES 5
 
 static i2c_master_dev_handle_t s_imu;
 static float s_filtered_x;
 static float s_filtered_y;
 static float s_filtered_z;
 static bool s_filter_initialized;
-static int s_reference_sector = -1;
-static int s_candidate_rotation;
+static board_rotation_t s_candidate_rotation = BOARD_ROTATION_0;
 static int s_stable_samples;
 static board_rotation_t s_applied_rotation = BOARD_ROTATION_0;
 
@@ -48,28 +44,6 @@ static esp_err_t read_acceleration(float *x, float *y, float *z)
     *y = (float)raw_y / QMI8658_ACCEL_LSB_PER_G;
     *z = (float)raw_z / QMI8658_ACCEL_LSB_PER_G;
     return ESP_OK;
-}
-
-static int gravity_sector(float x, float y)
-{
-    if (fabsf(x) > fabsf(y)) {
-        return x > 0.0f ? 1 : 3;
-    }
-    return y < 0.0f ? 0 : 2;
-}
-
-static board_rotation_t rotation_for_steps(int steps)
-{
-    switch (steps & 3) {
-    case 1:
-        return BOARD_ROTATION_90;
-    case 2:
-        return BOARD_ROTATION_180;
-    case 3:
-        return BOARD_ROTATION_270;
-    default:
-        return BOARD_ROTATION_0;
-    }
 }
 
 esp_err_t board_imu_init(void)
@@ -104,15 +78,17 @@ esp_err_t board_imu_init(void)
         board_i2c_write_reg(s_imu, QMI8658_REG_CTRL7, &ctrl7, 1), TAG,
         "Enable accelerometer");
     vTaskDelay(pdMS_TO_TICKS(20));
-    ESP_LOGI(TAG, "QMI8658 accelerometer initialized");
+    ESP_LOGI(TAG, "QMI8658 ready; 0 degrees is buttons up / USB-C down");
     return ESP_OK;
 }
 
-esp_err_t board_auto_rotation_update(bool *changed)
+esp_err_t board_auto_rotation_update(board_rotation_t *rotation, bool *changed)
 {
-    if (changed != NULL) {
-        *changed = false;
+    if (rotation == NULL || changed == NULL) {
+        return ESP_ERR_INVALID_ARG;
     }
+    *rotation = s_applied_rotation;
+    *changed = false;
     if (s_imu == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -133,46 +109,31 @@ esp_err_t board_auto_rotation_update(bool *changed)
         s_filtered_z += ORIENTATION_FILTER_ALPHA * (z - s_filtered_z);
     }
 
-    if (fabsf(s_filtered_z) >= FLAT_MIN_ABS_Z) {
+    board_rotation_t candidate;
+    if (!board_rotation_from_acceleration(s_filtered_x, s_filtered_y,
+                                          s_filtered_z, &candidate)) {
+        s_stable_samples = 0;
         return ESP_OK;
     }
 
-    const int sector = gravity_sector(s_filtered_x, s_filtered_y);
-    if (s_reference_sector < 0) {
-        s_reference_sector = sector;
-        s_candidate_rotation = 0;
-        s_stable_samples = ORIENTATION_STABLE_SAMPLES;
-        ESP_LOGI(TAG, "Orientation baseline: x=%.2f y=%.2f z=%.2f",
-                 s_filtered_x, s_filtered_y, s_filtered_z);
-        return ESP_OK;
-    }
-
-    const int candidate = (sector - s_reference_sector + 4) & 3;
     if (candidate != s_candidate_rotation) {
         s_candidate_rotation = candidate;
         s_stable_samples = 1;
         return ESP_OK;
     }
-
     if (s_stable_samples < ORIENTATION_STABLE_SAMPLES) {
         ++s_stable_samples;
     }
-    if (s_stable_samples < ORIENTATION_STABLE_SAMPLES) {
+    if (s_stable_samples < ORIENTATION_STABLE_SAMPLES ||
+        candidate == s_applied_rotation) {
         return ESP_OK;
     }
 
-    const board_rotation_t rotation = rotation_for_steps(candidate);
-    if (rotation == s_applied_rotation) {
-        return ESP_OK;
-    }
-
-    ESP_RETURN_ON_ERROR(board_display_set_rotation(rotation), TAG,
-                        "Set display rotation");
-    s_applied_rotation = rotation;
-    if (changed != NULL) {
-        *changed = true;
-    }
-    ESP_LOGI(TAG, "Auto rotation: %d degrees (x=%.2f y=%.2f z=%.2f)",
-             (int)rotation * 90, s_filtered_x, s_filtered_y, s_filtered_z);
+    s_applied_rotation = candidate;
+    *rotation = candidate;
+    *changed = true;
+    ESP_LOGI(TAG, "Physical orientation %s degrees (x=%.2f y=%.2f z=%.2f)",
+             board_rotation_name(candidate), s_filtered_x, s_filtered_y,
+             s_filtered_z);
     return ESP_OK;
 }

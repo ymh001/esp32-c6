@@ -73,6 +73,31 @@ esp_err_t clock_settings_load(clock_settings_t *settings)
     nvs_get_u8(handle, "night_end", &settings->night_end_hour);
 
     nvs_close(handle);
+
+    settings->use_24_hour = settings->use_24_hour != 0;
+    if (settings->brightness < 10 || settings->brightness > 100) {
+        settings->brightness = 80;
+    }
+    if (settings->night_brightness < 10 || settings->night_brightness > 100) {
+        settings->night_brightness = 20;
+    }
+    if (settings->night_start_hour > 23) {
+        settings->night_start_hour = 22;
+    }
+    if (settings->night_end_hour > 23) {
+        settings->night_end_hour = 7;
+    }
+    if (settings->timezone[0] == '\0') {
+        strlcpy(settings->timezone, "CST-8", sizeof(settings->timezone));
+    }
+    if (settings->ntp_server_1[0] == '\0') {
+        strlcpy(settings->ntp_server_1, "ntp.aliyun.com",
+                sizeof(settings->ntp_server_1));
+    }
+    if (settings->ntp_server_2[0] == '\0') {
+        strlcpy(settings->ntp_server_2, "time.cloudflare.com",
+                sizeof(settings->ntp_server_2));
+    }
     return ESP_OK;
 }
 
@@ -86,18 +111,15 @@ esp_err_t clock_settings_save(const clock_settings_t *settings)
     ESP_RETURN_ON_ERROR(
         nvs_open(NVS_NAMESPACE, NVS_READWRITE, &handle), TAG, "NVS open");
 
-    esp_err_t err = ESP_OK;
-    err |= nvs_set_str(handle, "timezone", settings->timezone);
-    err |= nvs_set_str(handle, "ntp1", settings->ntp_server_1);
-    err |= nvs_set_str(handle, "ntp2", settings->ntp_server_2);
-    err |= nvs_set_u8(handle, "use24h", settings->use_24_hour);
-    err |= nvs_set_u8(handle, "brightness", settings->brightness);
-    err |= nvs_set_u8(handle, "night_bright", settings->night_brightness);
-    err |= nvs_set_u8(handle, "night_start", settings->night_start_hour);
-    err |= nvs_set_u8(handle, "night_end", settings->night_end_hour);
-    if (err == ESP_OK) {
-        err = nvs_commit(handle);
-    }
+    esp_err_t err = nvs_set_str(handle, "timezone", settings->timezone);
+    if (err == ESP_OK) err = nvs_set_str(handle, "ntp1", settings->ntp_server_1);
+    if (err == ESP_OK) err = nvs_set_str(handle, "ntp2", settings->ntp_server_2);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "use24h", settings->use_24_hour);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "brightness", settings->brightness);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "night_bright", settings->night_brightness);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "night_start", settings->night_start_hour);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "night_end", settings->night_end_hour);
+    if (err == ESP_OK) err = nvs_commit(handle);
     nvs_close(handle);
     return err;
 }

@@ -32,7 +32,7 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 - Use `<` and `>` to change months.
 - Swipe down from any main page to open the control screen, or use the gear
   button on the electricity page.
-- The control panel slides and fades in. Tap or drag anywhere on the pill-shaped
+- The control panel opens immediately. Tap or drag anywhere on the pill-shaped
   brightness track, then swipe up to return. Device battery percentage is shown
   below.
 - Press KEY (GPIO10) as an optional hardware shortcut to toggle between the
