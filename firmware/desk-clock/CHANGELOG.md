@@ -33,6 +33,8 @@
 
 ### Fixed
 
+- Force a complete LVGL redraw after each automatic display rotation so the
+  old and new orientations cannot overlap on screen.
 - Removed full-screen slide animations that overloaded the LVGL render task
   and triggered the task watchdog on rapid swipes.
 - Rebuilt calendar cells without retaining stale objects from the previous

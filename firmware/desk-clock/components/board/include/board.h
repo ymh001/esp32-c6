@@ -53,7 +53,7 @@ esp_err_t board_rtc_read(struct tm *out);
 esp_err_t board_rtc_write(const struct tm *value);
 
 bool board_key_pressed(void);
-esp_err_t board_auto_rotation_update(void);
+esp_err_t board_auto_rotation_update(bool *changed);
 
 #ifdef __cplusplus
 }

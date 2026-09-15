@@ -108,8 +108,11 @@ esp_err_t board_imu_init(void)
     return ESP_OK;
 }
 
-esp_err_t board_auto_rotation_update(void)
+esp_err_t board_auto_rotation_update(bool *changed)
 {
+    if (changed != NULL) {
+        *changed = false;
+    }
     if (s_imu == NULL) {
         return ESP_ERR_INVALID_STATE;
     }
@@ -166,6 +169,9 @@ esp_err_t board_auto_rotation_update(void)
     ESP_RETURN_ON_ERROR(board_display_set_rotation(rotation), TAG,
                         "Set display rotation");
     s_applied_rotation = rotation;
+    if (changed != NULL) {
+        *changed = true;
+    }
     ESP_LOGI(TAG, "Auto rotation: %d degrees (x=%.2f y=%.2f z=%.2f)",
              (int)rotation * 90, s_filtered_x, s_filtered_y, s_filtered_z);
     return ESP_OK;

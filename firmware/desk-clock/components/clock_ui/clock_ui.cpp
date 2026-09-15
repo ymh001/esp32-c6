@@ -962,6 +962,11 @@ void clock_ui_auto_rotate_update(void)
     if (esp_lv_adapter_lock(-1) != ESP_OK) {
         return;
     }
-    board_auto_rotation_update();
+    bool rotation_changed = false;
+    if (board_auto_rotation_update(&rotation_changed) == ESP_OK &&
+        rotation_changed && s_lv_display != NULL) {
+        lv_obj_invalidate(lv_screen_active());
+        esp_lv_adapter_refresh_now(s_lv_display);
+    }
     esp_lv_adapter_unlock();
 }
