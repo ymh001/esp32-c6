@@ -16,7 +16,9 @@
   cyclic switching across the three main pages.
 - Replaced the setup portal and editable Wi-Fi settings with a station-only
   Wi-Fi manager using compile-time credentials.
-- Centralized the SSID and password in `wifi_credentials.h`.
+- Centralized primary/backup SSIDs and passwords in `wifi_credentials.h`.
+- Added automatic failover between the primary and backup networks after
+  repeated connection failures.
 - Added automatic reconnect with capped backoff.
 - Start SNTP only after the device obtains a Wi-Fi address.
 

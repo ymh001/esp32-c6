@@ -4,7 +4,7 @@ This directory is the isolated workspace for the Waveshare
 `ESP32-C6-Touch-AMOLED-2.16` board.
 
 The first firmware project is `firmware/desk-clock/`. It contains the working
-ESP-IDF clock, touch UI, local settings, hardcoded Wi-Fi connection, lunar
+ESP-IDF clock, touch UI, local settings, primary/backup Wi-Fi failover, lunar
 calendar, NTP time synchronization, electricity usage monitoring, and
 brightness controls.
 

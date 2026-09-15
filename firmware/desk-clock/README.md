@@ -12,8 +12,8 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
   cell.
 - Shared I2C support for AXP2101, PCF85063, and CST9220.
 - PCF85063 startup time and SNTP synchronization.
-- Compile-time Wi-Fi credentials with automatic reconnect and SNTP startup
-  after the network is available.
+- Compile-time primary/backup Wi-Fi credentials with automatic failover,
+  reconnect, and SNTP startup after a network is available.
 - Electricity page with today, current week, current month, and remaining kWh.
 - Automatic electricity refresh every hour plus a manual refresh.
 - NVS persistence for local clock preferences.
@@ -38,16 +38,20 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 
 ## Wi-Fi Configuration
 
-Wi-Fi is hardcoded at build time. To change networks, edit these two values in
-`components/wifi_manager/include/wifi_credentials.h`:
+Wi-Fi is hardcoded at build time. To change the primary and backup networks,
+edit these values in `components/wifi_manager/include/wifi_credentials.h`:
 
 ```c
-#define DESK_CLOCK_WIFI_SSID "your-ssid"
-#define DESK_CLOCK_WIFI_PASSWORD "your-password"
+#define DESK_CLOCK_WIFI_PRIMARY_SSID "your-primary-ssid"
+#define DESK_CLOCK_WIFI_PRIMARY_PASSWORD "your-primary-password"
+#define DESK_CLOCK_WIFI_BACKUP_SSID "your-backup-ssid"
+#define DESK_CLOCK_WIFI_BACKUP_PASSWORD "your-backup-password"
 ```
 
-Then rebuild and flash. The device no longer starts a setup hotspot or serves a
-configuration page.
+The device tries the primary network first. After three failed connection
+attempts it switches to the backup network, alternating between the two on
+subsequent failures. Then rebuild and flash. The device no longer starts a
+setup hotspot or serves a configuration page.
 
 ## Build
 
@@ -84,7 +88,7 @@ and retry.
 | `components/settings/` | NVS-backed configuration |
 | `components/time_service/` | Time zone, RTC restore, and SNTP |
 | `components/lunar/` | Lunar conversion, solar terms, and festivals |
-| `components/wifi_manager/` | Hardcoded Wi-Fi credentials and station reconnection |
+| `components/wifi_manager/` | Primary/backup Wi-Fi credentials, failover, and station reconnection |
 | `components/energy_service/` | Electricity API client and cached usage data |
 | `components/clock_ui/` | LVGL clock and calendar UI |
 | `host_tests/` | Host-side calendar tests |
@@ -127,8 +131,8 @@ firmware_backup/pre-desk-clock-full-20260914.bin
 SHA-256 7a806086fa8eebb0fe885a381048b16b60aaa9d05906ecb8904beeb91ce2b9c2
 ```
 
-The desk-clock firmware connects directly to the SSID configured in
-`components/wifi_manager/include/wifi_credentials.h`.
+The desk-clock firmware connects directly to the primary/backup SSIDs
+configured in `components/wifi_manager/include/wifi_credentials.h`.
 
 The generated DOT Matrix and Chinese subset fonts are stored under
 `components/clock_ui/fonts/` with their OFL license files.

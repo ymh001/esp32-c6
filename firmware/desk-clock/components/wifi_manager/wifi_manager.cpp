@@ -16,12 +16,33 @@ static const char *TAG = "wifi";
 
 #define RECONNECT_MIN_DELAY_MS 1000
 #define RECONNECT_MAX_DELAY_MS 10000
+#define CONNECT_FAILOVER_THRESHOLD 3
+
+typedef struct {
+    const char *ssid;
+    const char *password;
+} wifi_network_t;
+
+static const wifi_network_t s_networks[] = {
+    {
+        .ssid = DESK_CLOCK_WIFI_PRIMARY_SSID,
+        .password = DESK_CLOCK_WIFI_PRIMARY_PASSWORD,
+    },
+    {
+        .ssid = DESK_CLOCK_WIFI_BACKUP_SSID,
+        .password = DESK_CLOCK_WIFI_BACKUP_PASSWORD,
+    },
+};
+
+static const size_t s_network_count = sizeof(s_networks) / sizeof(s_networks[0]);
 
 static esp_netif_t *s_sta_netif;
 static esp_timer_handle_t s_reconnect_timer;
 static volatile wifi_manager_state_t s_state = WIFI_MANAGER_IDLE;
 static volatile bool s_connect_requested;
 static volatile int s_retry_count;
+static size_t s_network_index;
+static size_t s_network_attempt_count;
 static char s_ip[16] = "0.0.0.0";
 
 static void set_state(wifi_manager_state_t state)
@@ -37,6 +58,53 @@ static uint32_t reconnect_delay_ms(void)
         delay = RECONNECT_MAX_DELAY_MS;
     }
     return delay;
+}
+
+static const char *network_role(size_t index)
+{
+    return index == 0 ? "primary" : "backup";
+}
+
+static esp_err_t apply_network_config(size_t index)
+{
+    if (index >= s_network_count) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_config_t config = {};
+    strlcpy((char *)config.sta.ssid, s_networks[index].ssid,
+            sizeof(config.sta.ssid));
+    strlcpy((char *)config.sta.password, s_networks[index].password,
+            sizeof(config.sta.password));
+    config.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+
+    return esp_wifi_set_config(WIFI_IF_STA, &config);
+}
+
+static bool switch_to_next_network(void)
+{
+    if (s_network_count < 2) {
+        return false;
+    }
+
+    s_network_index = (s_network_index + 1) % s_network_count;
+    s_network_attempt_count = 0;
+    s_retry_count = 0;
+
+    const esp_err_t err = apply_network_config(s_network_index);
+    if (err != ESP_OK) {
+        set_state(WIFI_MANAGER_ERROR);
+        ESP_LOGE(TAG, "Unable to select %s Wi-Fi '%s': %s",
+                 network_role(s_network_index), s_networks[s_network_index].ssid,
+                 esp_err_to_name(err));
+        return false;
+    }
+
+    ESP_LOGW(TAG, "Switching to %s Wi-Fi '%s'",
+             network_role(s_network_index), s_networks[s_network_index].ssid);
+    return true;
 }
 
 static void reconnect_timer_callback(void *arg)
@@ -78,9 +146,14 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
             return;
         }
         s_retry_count = s_retry_count + 1;
+        s_network_attempt_count = s_network_attempt_count + 1;
         set_state(WIFI_MANAGER_CONNECTING);
         ESP_LOGW(TAG, "Disconnected from '%s' (reason %u)",
-                 DESK_CLOCK_WIFI_SSID, event->reason);
+                 s_networks[s_network_index].ssid, event->reason);
+        if (s_network_attempt_count >= CONNECT_FAILOVER_THRESHOLD &&
+            !switch_to_next_network()) {
+            return;
+        }
         schedule_reconnect();
         return;
     }
@@ -89,9 +162,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
         snprintf(s_ip, sizeof(s_ip), IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_count = 0;
+        s_network_attempt_count = 0;
         esp_timer_stop(s_reconnect_timer);
         set_state(WIFI_MANAGER_CONNECTED);
-        ESP_LOGI(TAG, "Connected to '%s', IP: %s", DESK_CLOCK_WIFI_SSID,
+        ESP_LOGI(TAG, "Connected to %s Wi-Fi '%s', IP: %s",
+                 network_role(s_network_index), s_networks[s_network_index].ssid,
                  s_ip);
     }
 }
@@ -143,23 +218,16 @@ static void connect_task(void *arg)
 {
     (void)arg;
 
-    wifi_config_t config = {};
-    strlcpy((char *)config.sta.ssid, DESK_CLOCK_WIFI_SSID,
-            sizeof(config.sta.ssid));
-    strlcpy((char *)config.sta.password, DESK_CLOCK_WIFI_PASSWORD,
-            sizeof(config.sta.password));
-    config.sta.threshold.authmode = WIFI_AUTH_OPEN;
-    config.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
-    config.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
-
-    ESP_LOGI(TAG, "Connecting to hardcoded Wi-Fi SSID '%s'",
-             DESK_CLOCK_WIFI_SSID);
+    s_network_index = 0;
+    s_network_attempt_count = 0;
+    ESP_LOGI(TAG, "Connecting to %s Wi-Fi '%s'", network_role(s_network_index),
+             s_networks[s_network_index].ssid);
     s_connect_requested = true;
     set_state(WIFI_MANAGER_CONNECTING);
 
     esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
     if (err == ESP_OK) {
-        err = esp_wifi_set_config(WIFI_IF_STA, &config);
+        err = apply_network_config(s_network_index);
     }
     if (err == ESP_OK) {
         err = esp_wifi_start();
