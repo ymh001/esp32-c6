@@ -7,16 +7,14 @@
 
 typedef struct {
     bool loaded;
-    bool month_loaded;
     bool refreshing;
-    bool month_refreshing;
     bool refresh_failed;
-    bool month_failed;
+    bool stale;
     time_t updated_at;
     float today_kwh;
-    float week_kwh;
-    float month_kwh;
-    float remaining_kwh;
+    float today_cost;
+    float remaining_cost;
+    float price_per_kwh;
     char message[64];
 } energy_snapshot_t;
 

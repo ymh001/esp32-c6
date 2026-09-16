@@ -1,6 +1,6 @@
 idf_component_register(SRCS "voice_service.cpp" "voice_text.cpp" INCLUDE_DIRS "include"
     REQUIRES board wifi_manager network_gate
-    PRIV_REQUIRES espressif__esp_websocket_client esp_http_client json esp_timer)
+    PRIV_REQUIRES mbedtls espressif__esp_websocket_client esp_http_client json esp_timer)
 
 if(CONFIG_DESK_CLOCK_VOICE_SELF_TEST)
     target_add_binary_data(${COMPONENT_LIB} "../../host_tests/data/ha_query.pcm" BINARY

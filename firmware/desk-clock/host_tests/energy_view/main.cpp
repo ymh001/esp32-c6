@@ -47,8 +47,8 @@ int main(int argc, char **argv)
     energy_view_data_t data = {};
     energy_view_update(&view, &data);
     assert(strcmp(lv_label_get_text(view.values[0]), "--") == 0);
-    data.loaded = data.month_loaded = true;
-    data.today = 5.25f; data.week = 32.75f; data.month = 75.51f; data.remaining = 121.84f;
+    data.loaded = true;
+    data.today = 5.25f; data.today_cost=5.78f; data.remaining_cost=134.02f; data.price_per_kwh=1.1f;
     struct tm updated = {};
     updated.tm_year = 126; updated.tm_mon = 8; updated.tm_mday = 15;
     updated.tm_hour = 21; updated.tm_min = 30;
@@ -56,8 +56,8 @@ int main(int argc, char **argv)
     energy_view_update(&view, &data);
     lv_refr_now(display);
     dump(argv[1]);
-    assert(lv_obj_get_width(view.refresh) == 432 && lv_obj_get_height(view.refresh) == 70);
-    assert(strcmp(lv_label_get_text(view.status), "● 已更新") == 0);
+    assert(lv_obj_get_width(view.refresh) == 432 && lv_obj_get_height(view.refresh) == 56);
+    assert(strcmp(lv_label_get_text(view.status), "● 已同步") == 0);
     assert(strcmp(lv_label_get_text(view.updated), "更新于 21:30") == 0);
     lv_obj_send_event(view.refresh, LV_EVENT_CLICKED, NULL);
     assert(clicks == 1);
@@ -69,10 +69,12 @@ int main(int argc, char **argv)
     assert(!lv_obj_has_state(view.refresh, LV_STATE_DISABLED));
     assert(strcmp(lv_label_get_text(view.status), "● 更新失败") == 0);
     assert(strcmp(lv_label_get_text(view.values[0]), "5.25") == 0);
-    data.failed = false; data.partial = true;
+    data.failed = false; data.stale = true;
     energy_view_update(&view, &data);
-    assert(strcmp(lv_label_get_text(view.status), "● 部分更新") == 0);
-    data.remaining = 123456.78f; data.today = NAN;
+    assert(strcmp(lv_label_get_text(view.status), "● 数据较旧") == 0);
+    assert(strcmp(lv_label_get_text(view.values[1]), "5.78 元") == 0);
+    assert(strcmp(lv_label_get_text(view.values[2]), "134.02 元") == 0);
+    data.remaining_cost = 123456.78f; data.today = NAN;
     energy_view_update(&view, &data);
     assert(strcmp(lv_label_get_text(view.values[0]), "--") == 0);
     lv_refr_now(display);

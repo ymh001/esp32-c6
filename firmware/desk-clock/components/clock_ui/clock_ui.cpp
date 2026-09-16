@@ -1,3 +1,4 @@
+#include "main_navigation.h"
 #include "clock_ui.h"
 
 #include <assert.h>
@@ -257,6 +258,7 @@ static void screen_gesture_cb(lv_event_t *event)
     if (indev == NULL) {
         return;
     }
+    if(lv_screen_active()==s_ui.devices.screen)return;
     const lv_dir_t direction = lv_indev_get_gesture_dir(indev);
     if (lv_screen_active() == s_ui.control_screen) {
         if (direction == LV_DIR_TOP) {
@@ -420,14 +422,13 @@ static void update_energy_view(void)
     energy_service_get_snapshot(&snapshot);
     const energy_view_data_t data = {
         .loaded = snapshot.loaded,
-        .month_loaded = snapshot.month_loaded,
-        .refreshing = snapshot.refreshing || snapshot.month_refreshing,
+        .refreshing = snapshot.refreshing,
         .failed = snapshot.refresh_failed,
-        .partial = snapshot.month_failed,
+        .stale = snapshot.stale,
         .today = snapshot.today_kwh,
-        .week = snapshot.week_kwh,
-        .month = snapshot.month_kwh,
-        .remaining = snapshot.remaining_kwh,
+        .today_cost = snapshot.today_cost,
+        .remaining_cost = snapshot.remaining_cost,
+        .price_per_kwh = snapshot.price_per_kwh,
         .updated_at = snapshot.updated_at,
     };
     energy_view_update(&s_ui.energy, &data);
@@ -472,6 +473,8 @@ static void clock_timer(lv_timer_t *timer)
                  (unsigned)monitor.free_biggest_size, monitor.frag_pct);
     }
 }
+
+static void xiaozhi_nav(lv_event_t *event);
 
 static void build_clock_screen(void)
 {
@@ -518,7 +521,7 @@ static void build_clock_screen(void)
 
     for (int i = 0; i < 7; ++i) {
         lv_obj_t *cell = lv_obj_create(s_ui.clock_screen);
-        lv_obj_set_size(cell, 64, 152);
+        lv_obj_set_size(cell, 64, 128);
         lv_obj_set_pos(cell, 16 + i * 64, 286);
         lv_obj_set_scrollbar_mode(cell, LV_SCROLLBAR_MODE_OFF);
         lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
@@ -541,6 +544,7 @@ static void build_clock_screen(void)
             make_label(cell, "", s_cjk_font, lv_color_hex(0xAAB3C2));
         lv_obj_align(s_ui.week_lunar_labels[i], LV_ALIGN_BOTTOM_MID, 0, -8);
     }
+    main_navigation_create(s_ui.clock_screen,MAIN_PAGE_CLOCK,xiaozhi_nav);
 }
 
 static void refresh_button_clicked(lv_event_t *event)
@@ -574,7 +578,7 @@ static void brightness_released(lv_event_t *event)
 
 static void build_energy_screen(void)
 {
-    s_ui.energy = energy_view_create(refresh_button_clicked);
+    s_ui.energy = energy_view_create(refresh_button_clicked,xiaozhi_nav);
     s_ui.energy_screen = s_ui.energy.screen;
     lv_obj_add_event_cb(s_ui.energy_screen, screen_gesture_cb, LV_EVENT_GESTURE, NULL);
 }
@@ -678,7 +682,7 @@ static void voice_timer(lv_timer_t *)
     if(devices_revision!=devices.revision){
         devices_revision=devices.revision;
         devices_view_data_t data={};data.message=devices.message;data.refreshing=devices.refreshing;
-        for(int i=0;i<4;++i)data.cards[i]={devices.devices[i].power,devices.devices[i].busy,devices.devices[i].error};
+        for(size_t i=0;i<HA_DEVICE_COUNT;++i)data.cards[i]={devices.devices[i].power,devices.devices[i].busy,devices.devices[i].error};
         devices_view_update(&s_ui.devices,&data);
     }
 }

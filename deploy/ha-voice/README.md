@@ -31,3 +31,9 @@ checks functionality, not real microphone/noise accuracy. No HA device action ra
 Image IDs used:
 - Whisper: sha256:efeecfed9316c203350e3efba3bf2cbc45b0172b4646ee02a2a0534382a25024
 - Piper: sha256:e9083a600a739b4b9c633684efe5952be4105ca1c10b5a62f8dfb28afb3beac3
+
+## 外网屏幕
+
+外网屏幕只连接 HA 的 HTTPS/WSS 入口 `ha.hz.leaflab.cn:8888`。
+本 Compose 的两个端口用于 HA 在 NAS 内网访问，保持现有绑定。
+Whisper/Piper 的 HTTPS 子域名目前返回 502，不是可用的 Wyoming 连接入口。

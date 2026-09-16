@@ -1,3 +1,4 @@
+#include "main_navigation.h"
 #include "xiaozhi_view.h"
 #include <stdint.h>
 
@@ -81,14 +82,6 @@ lv_obj_t *xiaozhi_view_create(lv_event_cb_t navigation, lv_event_cb_t speak)
     lv_obj_set_style_bg_color(button, lv_color_hex(0x303448), LV_STATE_DISABLED);
     lv_obj_t *label = speak_label = text(button, "点击说话", &clock_cjk_24, 0xFFFFFF, 0, 0);
     lv_obj_center(label);
-    const char *names[] = {"时钟", "小智", "设备", "耗电"};
-    for (int i = 0; i < 4; ++i) {
-        lv_obj_t *tab = box(screen, i * 120, 428, 120, 52, 0, 0);
-        lv_obj_add_flag(tab, LV_OBJ_FLAG_CLICKABLE);
-        if (navigation) lv_obj_add_event_cb(tab, navigation, LV_EVENT_CLICKED, (void *)(intptr_t)i);
-        lv_obj_t *name = text(tab, names[i], &clock_cjk_16, i == 1 ? 0xA4A6FF : 0xD8DAE2, 0, 0);
-        lv_obj_align(name, LV_ALIGN_TOP_MID, 0, 10);
-    }
-    box(screen, 161, 467, 38, 3, 0xA4A6FF, 1);
+    main_navigation_create(screen,1,navigation);
     return screen;
 }

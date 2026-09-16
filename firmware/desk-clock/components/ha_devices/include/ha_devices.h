@@ -3,7 +3,7 @@
 #include "esp_err.h"
 #include "device_power.h"
 
-enum { HA_DEVICE_COUNT=4 };
+#include "device_catalog.h"
 struct ha_device_state_t { device_power_t power; bool busy, error; };
 struct ha_devices_snapshot_t {
     ha_device_state_t devices[HA_DEVICE_COUNT];

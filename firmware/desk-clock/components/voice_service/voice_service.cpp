@@ -2,6 +2,7 @@
 #include "voice_text.h"
 #include "network_gate.h"
 #include "voice_credentials.h"
+#include "esp_crt_bundle.h"
 #include "board.h"
 #include "wifi_manager.h"
 #include "esp_websocket_client.h"
@@ -199,9 +200,9 @@ static bool play_reply(void)
     update(VOICE_SPEAKING,reply);
     checkpoint(TTS_REQUEST);
     // Request PCM WAV explicitly; Assist's default TTS response is MP3.
-    char url[512]="http://" HA_VOICE_HOST ":8123/api/tts_get_url";
+    char url[512]=HA_HTTP_BASE_URL "/api/tts_get_url";
     esp_http_client_config_t cfg={};cfg.url=url;cfg.timeout_ms=15000;cfg.buffer_size=2048;
-    cfg.disable_auto_redirect=true;
+    cfg.disable_auto_redirect=true;cfg.crt_bundle_attach=esp_crt_bundle_attach;
     esp_http_client_handle_t h=esp_http_client_init(&cfg);
     if (!h) return false;
     esp_http_client_set_method(h,HTTP_METHOD_POST);
@@ -231,7 +232,7 @@ static bool play_reply(void)
     const char *path=str(r,"path");
     // Only fetch from the already-authorized HA host, never a returned external URL.
     ok=!strncmp(path,"/api/tts_proxy/",15) && strlen(path)<380;
-    if(ok)snprintf(url,sizeof(url),"http://" HA_VOICE_HOST ":8123%s",path);
+    if(ok)snprintf(url,sizeof(url),HA_HTTP_BASE_URL "%s",path);
     cJSON_Delete(r);if(!ok)return false;
     checkpoint(TTS_DOWNLOAD);
     cfg.url=url;h=esp_http_client_init(&cfg);if(!h)return false;
@@ -279,8 +280,8 @@ static void run_voice(void)
     NetworkLease network(pdMS_TO_TICKS(15000));
     if(!network){fail("网络忙，请稍后再试");return;}
     checkpoint(TURN_START);
-    esp_websocket_client_config_t cfg={};cfg.uri="ws://" HA_VOICE_HOST ":8123/api/websocket";
-    cfg.disable_auto_reconnect=true;cfg.network_timeout_ms=5000;cfg.task_stack=6144;cfg.buffer_size=2048;
+    esp_websocket_client_config_t cfg={};cfg.uri=HA_WEBSOCKET_URL;
+    cfg.crt_bundle_attach=esp_crt_bundle_attach;cfg.disable_auto_reconnect=true;cfg.network_timeout_ms=5000;cfg.task_stack=6144;cfg.buffer_size=2048;
     esp_websocket_client_handle_t ws=esp_websocket_client_init(&cfg);
     if(!ws){fail("内存不足，请重试");return;}
     ESP_LOGI(TAG,"Connecting to %s; heap=%u",cfg.uri,(unsigned)esp_get_free_heap_size());

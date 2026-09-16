@@ -97,7 +97,7 @@ and retry.
 | `components/time_service/` | Time zone, RTC restore, and SNTP |
 | `components/lunar/` | Lunar conversion, solar terms, and festivals |
 | `components/wifi_manager/` | Primary/backup Wi-Fi credentials, failover, and station reconnection |
-| `components/energy_service/` | Electricity API client and cached usage data |
+| `components/energy_service/` | Grafana read-only query client and cached energy/cost data |
 | `components/clock_ui/` | LVGL clock and calendar UI |
 | `host_tests/` | Host-side calendar tests |
 
@@ -200,12 +200,30 @@ ESP-IDF 5.5.2 的 WebSocket 接收有缓存轮询缺陷：HA 授权消息与 HTT
 
 ## 手动设备页
 
-左右滑动到“设备”（小智与耗电之间），点击客厅灯、卧室灯、屏幕挂灯或空调卡片切换电源。
+从底栏进入“设备”，上下滑动设备列表。点击客厅灯、卧室灯、屏幕挂灯、风扇、空调或打印机右侧独立开关控制。
 绿色表示已开启，灰色表示已关闭；操作后回读 HA 确认状态。右上角可刷新，停留时每 15 秒自动同步。
-空调目前仅控制电源，详细模式与温度仍在 HA 设置。
+卡片本身不触发控制，拖动经过开关也不会切换。设备目录位于 `components/ha_devices/include/device_catalog.h`，追加条目后列表与状态数组自动扩展。
 
 ### 本地凭据
 
 首次编译前，将 WiFi、耗电服务和语音服务各自 `include/` 目录下的
 `*_credentials.example.h` 复制为 `*_credentials.h` 并填写本地配置。
 实际凭据文件已加入忽略规则，不随代码提交；现有本地配置保持可用。
+
+## 外网访问
+
+屏幕设备控制使用 `https://ha.hz.leaflab.cn:8888`，Assist 使用同域名的 WSS
+连接，TTS 文件也从该 HTTPS 入口下载，均验证服务器证书。配置位于忽略的
+`components/voice_service/include/voice_credentials.h`，可参考同目录模板。
+
+HA 在 NAS 内网连接 Whisper `192.168.3.2:10300`、Piper `192.168.3.2:10200`。
+这两个 Wyoming TCP 服务无需对外开放，不能直接替换为普通 HTTPS 反代地址。
+屏幕在外网需连接已配置的 WiFi；HA 反代必须支持 WebSocket 升级。
+
+## 当前耗电页（Grafana）
+
+仅展示今日耗电、今日电费、剩余电费。屏幕通过 Grafana HTTPS 只读查询 NAS 数据库，
+不再携带或使用原电量网站凭据，也不自行计算金额。每 10 分钟读取，按钮立即重读。
+NAS 持久采集和历史不受固件刷新影响；超过两小时的源数据标为较旧，跨日未更新时今日项为空。
+配置模板：`components/energy_service/include/grafana_credentials.example.h`。
+部署契约见仓库 `deploy/grafana-screen/`。
