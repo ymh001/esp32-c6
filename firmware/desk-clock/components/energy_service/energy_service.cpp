@@ -75,7 +75,7 @@ static void task(void *)
         xSemaphoreGive(mutex);
         if(ok)ESP_LOGI(TAG,"Grafana today=%.2f kWh cost=%.2f remaining=%.2f stale=%d",next.today_kwh,next.today_cost,next.remaining_cost,next.stale);
         else ESP_LOGW(TAG,"Grafana energy request failed");
-        xEventGroupWaitBits(events,BIT0,pdTRUE,pdFALSE,pdMS_TO_TICKS(10 * 60 * 1000));
+        xEventGroupWaitBits(events,BIT0,pdTRUE,pdFALSE,portMAX_DELAY);
     }
 }
 esp_err_t energy_service_init(void)

@@ -16,3 +16,5 @@ esp_err_t wifi_manager_start(void);
 wifi_manager_state_t wifi_manager_state(void);
 bool wifi_manager_is_connected(void);
 void wifi_manager_get_ip(char *out, size_t size);
+
+void wifi_manager_stop(void);

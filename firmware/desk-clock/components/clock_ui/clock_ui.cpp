@@ -9,8 +9,6 @@
 #include "board.h"
 #include "energy_service.h"
 #include "energy_view.h"
-#include "xiaozhi_view.h"
-#include "voice_service.h"
 #include "ha_devices.h"
 #include "devices_view.h"
 #include "esp_check.h"
@@ -24,6 +22,8 @@
 #include "lvgl.h"
 #include "time_service.h"
 #include "wifi_manager.h"
+#include "network_gate.h"
+#include <atomic>
 
 static const char *TAG = "clock_ui";
 
@@ -39,7 +39,6 @@ LV_FONT_DECLARE(clock_cjk_96);
 
 typedef enum {
     MAIN_PAGE_CLOCK = 0,
-    MAIN_PAGE_XIAOZHI,
     MAIN_PAGE_DEVICES,
     MAIN_PAGE_ENERGY,
     MAIN_PAGE_COUNT,
@@ -47,7 +46,6 @@ typedef enum {
 
 typedef struct {
     lv_obj_t *clock_screen;
-    lv_obj_t *xiaozhi_screen;
     lv_obj_t *energy_screen;
     devices_view_t devices;
     lv_obj_t *control_screen;
@@ -81,6 +79,41 @@ static const lv_font_t *s_cjk_title_font = &clock_cjk_24;
 static const lv_font_t *s_cjk_date_font = &clock_cjk_32;
 static const lv_font_t *s_cjk_clock_font = &clock_cjk_96;
 static uint32_t s_last_view_switch_tick;
+
+static std::atomic<bool> s_screen_off{false};
+static bool s_suppress_touch;
+static uint32_t s_last_activity;
+static std::atomic<bool> s_external_power{false};
+static lv_indev_read_cb_t s_touch_read;
+
+static void wake_screen(void)
+{
+    s_last_activity=lv_tick_get();
+    if(!s_screen_off)return;
+    if(board_set_backlight(s_ui_settings.brightness)==ESP_OK){
+        s_screen_off=false;s_ui.applied_brightness=s_ui_settings.brightness;
+        lv_obj_invalidate(lv_screen_active());
+        ESP_LOGI(TAG,"Screen awake");
+    }
+}
+static void power_touch_read(lv_indev_t *indev,lv_indev_data_t *data)
+{
+    s_touch_read(indev,data);
+    const bool pressed=data->state==LV_INDEV_STATE_PRESSED;
+    if(pressed){
+        s_last_activity=lv_tick_get();
+        if(s_screen_off){s_suppress_touch=true;wake_screen();}
+    }
+    if(s_suppress_touch){data->state=LV_INDEV_STATE_RELEASED;if(!pressed)s_suppress_touch=false;}
+}
+static void screen_power_tick(void)
+{
+    if(s_ui_settings.stay_awake_on_power && s_external_power){wake_screen();return;}
+    if(!s_ui_settings.screen_off_seconds){wake_screen();return;}
+    if(!s_screen_off && lv_tick_elaps(s_last_activity)>=s_ui_settings.screen_off_seconds*1000U){
+        if(board_set_backlight(0)==ESP_OK){s_screen_off=true;s_ui.applied_brightness=0;ESP_LOGI(TAG,"Screen off");}
+    }
+}
 
 // LVGL renders in strips because this ESP32-C6 has no PSRAM. A 90/270-degree
 // pose turns a 32-row strip into a 32-column QSPI transfer. Keep one DMA-safe
@@ -214,8 +247,7 @@ static void show_main_page(main_page_t page)
     ha_devices_set_visible(page==MAIN_PAGE_DEVICES);
     if (page == MAIN_PAGE_CLOCK) {
         lv_screen_load(s_ui.clock_screen);
-    } else if (page == MAIN_PAGE_XIAOZHI) {
-        lv_screen_load(s_ui.xiaozhi_screen);
+
     } else if (page == MAIN_PAGE_DEVICES) {
         lv_screen_load(s_ui.devices.screen);
     } else {
@@ -242,7 +274,7 @@ static void show_control_screen(void)
         s_ui.previous_page = s_ui.current_page;
     }
     lv_anim_delete(s_ui.control_panel, NULL);
-    lv_obj_align(s_ui.control_panel, LV_ALIGN_CENTER, 0, 20);
+    lv_obj_align(s_ui.control_panel, LV_ALIGN_CENTER, 0, 0);
     lv_obj_set_style_opa(s_ui.control_panel, LV_OPA_COVER, 0);
     lv_screen_load(s_ui.control_screen);
 }
@@ -343,23 +375,11 @@ static void update_clock(void)
     struct tm local = {0};
     time_service_get_local(&local);
 
-    int hour = local.tm_hour;
-    const char *suffix = "";
-    if (!s_ui_settings.use_24_hour) {
-        suffix = hour >= 12 ? " PM" : " AM";
-        hour %= 12;
-        if (hour == 0) {
-            hour = 12;
-        }
-    }
-
     char time_text[16];
-    snprintf(time_text, sizeof(time_text), "%02d:%02d", hour, local.tm_min);
+    snprintf(time_text, sizeof(time_text), "%02d:%02d", local.tm_hour, local.tm_min);
     lv_label_set_text(s_ui.time_label, time_text);
-
     char seconds_text[8];
-    snprintf(seconds_text, sizeof(seconds_text), ":%02d%s", local.tm_sec,
-             suffix);
+    snprintf(seconds_text, sizeof(seconds_text), ":%02d", local.tm_sec);
     lv_label_set_text(s_ui.seconds_label, seconds_text);
 
     char date_text[64];
@@ -393,6 +413,8 @@ static void update_clock(void)
                  time_service_is_synced() ? "NTP 已同步" : "等待校时", ip);
     } else if (wifi_manager_state() == WIFI_MANAGER_CONNECTING) {
         snprintf(status, sizeof(status), "WiFi 连接中");
+    } else if(wifi_manager_state()==WIFI_MANAGER_IDLE) {
+        snprintf(status,sizeof(status),"WiFi 省电休眠");
     } else {
         snprintf(status, sizeof(status), "WiFi 未连接");
     }
@@ -409,7 +431,7 @@ static void update_clock(void)
     if (night) {
         brightness = s_ui_settings.night_brightness;
     }
-    if (brightness != s_ui.applied_brightness) {
+    if (!s_screen_off && brightness != s_ui.applied_brightness) {
         if (board_set_backlight((uint8_t)brightness) == ESP_OK) {
             s_ui.applied_brightness = brightness;
         }
@@ -440,6 +462,8 @@ void clock_ui_poll_battery(void)
     const TickType_t now = xTaskGetTickCount();
     if (now - last_poll < pdMS_TO_TICKS(5000)) return;
     last_poll = now;
+    bool powered;
+    if(board_power_external(&powered)==ESP_OK)s_external_power=powered;
     static uint8_t last_percent = UINT8_MAX;
     uint8_t percent = 0;
     uint16_t voltage_mv = 0;
@@ -460,6 +484,8 @@ void clock_ui_poll_battery(void)
 static void clock_timer(lv_timer_t *timer)
 {
     (void)timer;
+    screen_power_tick();
+    if(s_screen_off)return;
     update_clock();
     update_energy_view();
 
@@ -474,7 +500,7 @@ static void clock_timer(lv_timer_t *timer)
     }
 }
 
-static void xiaozhi_nav(lv_event_t *event);
+static void main_nav(lv_event_t *event);
 
 static void build_clock_screen(void)
 {
@@ -544,7 +570,7 @@ static void build_clock_screen(void)
             make_label(cell, "", s_cjk_font, lv_color_hex(0xAAB3C2));
         lv_obj_align(s_ui.week_lunar_labels[i], LV_ALIGN_BOTTOM_MID, 0, -8);
     }
-    main_navigation_create(s_ui.clock_screen,MAIN_PAGE_CLOCK,xiaozhi_nav);
+    main_navigation_create(s_ui.clock_screen,MAIN_PAGE_CLOCK,main_nav);
 }
 
 static void refresh_button_clicked(lv_event_t *event)
@@ -578,10 +604,32 @@ static void brightness_released(lv_event_t *event)
 
 static void build_energy_screen(void)
 {
-    s_ui.energy = energy_view_create(refresh_button_clicked,xiaozhi_nav);
+    s_ui.energy = energy_view_create(refresh_button_clicked,main_nav);
     s_ui.energy_screen = s_ui.energy.screen;
     lv_obj_add_event_cb(s_ui.energy_screen, screen_gesture_cb, LV_EVENT_GESTURE, NULL);
 }
+
+static const uint8_t sync_options[]={0,1,5,15,30,60};
+static const uint8_t off_options[]={5,15,30,60,0};
+static void power_setting_changed(lv_event_t *event)
+{
+    const unsigned kind=(uintptr_t)lv_event_get_user_data(event);
+    auto obj=(lv_obj_t *)lv_event_get_target(event);
+    if(kind==0){s_ui_settings.sync_minutes=sync_options[lv_dropdown_get_selected(obj)];network_set_sync_minutes(s_ui_settings.sync_minutes);}
+    else if(kind==1)s_ui_settings.screen_off_seconds=off_options[lv_dropdown_get_selected(obj)];
+    else s_ui_settings.stay_awake_on_power=lv_obj_has_state(obj,LV_STATE_CHECKED);
+    s_last_activity=lv_tick_get();clock_settings_request_save(&s_ui_settings);
+}
+static void power_dropdown(const char *title,const char *options,unsigned kind,unsigned selected,int y)
+{
+    auto label=make_label(s_ui.control_panel,title,s_cjk_font,lv_color_white());lv_obj_set_pos(label,18,y+14);
+    auto dd=lv_dropdown_create(s_ui.control_panel);lv_obj_set_pos(dd,238,y);lv_obj_set_size(dd,180,48);
+    lv_obj_set_style_text_font(dd,s_cjk_font,0);lv_dropdown_set_options(dd,options);lv_dropdown_set_selected(dd,selected);
+    lv_obj_set_style_text_font(lv_dropdown_get_list(dd),s_cjk_font,0);
+    lv_obj_remove_flag(dd,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(dd,power_setting_changed,LV_EVENT_VALUE_CHANGED,(void *)(uintptr_t)kind);
+}
+static void close_settings_clicked(lv_event_t *){close_control_screen();}
 
 static void build_control_screen(void)
 {
@@ -593,8 +641,8 @@ static void build_control_screen(void)
                         LV_EVENT_GESTURE, NULL);
 
     s_ui.control_panel = lv_obj_create(s_ui.control_screen);
-    lv_obj_set_size(s_ui.control_panel, 440, 300);
-    lv_obj_align(s_ui.control_panel, LV_ALIGN_CENTER, 0, 20);
+    lv_obj_set_size(s_ui.control_panel, 440, 430);
+    lv_obj_align(s_ui.control_panel, LV_ALIGN_CENTER, 0, 0);
     lv_obj_clear_flag(s_ui.control_panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_radius(s_ui.control_panel, 10, 0);
     lv_obj_set_style_bg_opa(s_ui.control_panel, LV_OPA_TRANSP, 0);
@@ -609,7 +657,7 @@ static void build_control_screen(void)
     lv_obj_t *brightness_label =
         make_label(s_ui.control_panel, "屏幕亮度", s_cjk_title_font,
                    lv_color_hex(0xD7DDE7));
-    lv_obj_align(brightness_label, LV_ALIGN_TOP_MID, 0, 86);
+    lv_obj_align(brightness_label, LV_ALIGN_TOP_LEFT, 18, 65);
 
     s_ui.brightness_slider = lv_slider_create(s_ui.control_panel);
     // Rounded bar clipping creates an ARGB8888 layer near the minimum value.
@@ -617,8 +665,8 @@ static void build_control_screen(void)
     lv_obj_remove_style_all(s_ui.brightness_slider);
     lv_obj_set_style_bg_opa(s_ui.brightness_slider, LV_OPA_COVER, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(s_ui.brightness_slider, LV_OPA_COVER, LV_PART_INDICATOR);
-    lv_obj_set_size(s_ui.brightness_slider, 360, 40);
-    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 138);
+    lv_obj_set_size(s_ui.brightness_slider, 390, 32);
+    lv_obj_align(s_ui.brightness_slider, LV_ALIGN_TOP_MID, 0, 103);
     lv_obj_set_ext_click_area(s_ui.brightness_slider, 12);
     lv_slider_set_range(s_ui.brightness_slider, 10, 100);
     lv_slider_set_value(s_ui.brightness_slider, s_ui_settings.brightness,
@@ -643,40 +691,48 @@ static void build_control_screen(void)
     s_ui.brightness_value_label =
         make_label(s_ui.control_panel, "80%", s_cjk_title_font,
                    lv_color_white());
-    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_MID, 0, 200);
+    lv_obj_align(s_ui.brightness_value_label, LV_ALIGN_TOP_RIGHT, -18, 65);
     char text[16];
     snprintf(text, sizeof(text), "%u%%", s_ui_settings.brightness);
     lv_label_set_text(s_ui.brightness_value_label, text);
+    unsigned sync=0,off=0;
+    for(unsigned i=0;i<6;++i)if(sync_options[i]==s_ui_settings.sync_minutes)sync=i;
+    for(unsigned i=0;i<5;++i)if(off_options[i]==s_ui_settings.screen_off_seconds)off=i;
+    power_dropdown("同步间隔","常久在线\n1 分钟\n5 分钟\n15 分钟\n30 分钟\n60 分钟",0,sync,160);
+    power_dropdown("自动息屏","5 秒\n15 秒\n30 秒\n60 秒\n不息屏",1,off,220);
+    auto plugged=make_label(s_ui.control_panel,"插电时不息屏",s_cjk_font,lv_color_white());lv_obj_set_pos(plugged,18,296);
+    auto sw=lv_switch_create(s_ui.control_panel);lv_obj_set_pos(sw,328,282);lv_obj_set_size(sw,90,44);
+    if(s_ui_settings.stay_awake_on_power)lv_obj_add_state(sw,LV_STATE_CHECKED);
+    lv_obj_remove_flag(sw,LV_OBJ_FLAG_GESTURE_BUBBLE);
+    lv_obj_add_event_cb(sw,power_setting_changed,LV_EVENT_VALUE_CHANGED,(void *)2);
+    auto hint=make_label(s_ui.control_panel,"点击设备开关或刷新时自动联网",s_cjk_font,lv_color_hex(0x8E98A8));lv_obj_set_pos(hint,18,346);
+    auto back=lv_button_create(s_ui.control_panel);lv_obj_set_pos(back,18,4);lv_obj_set_size(back,70,44);
+    auto back_text=make_label(back,"返回",s_cjk_font,lv_color_white());lv_obj_center(back_text);
+    lv_obj_add_event_cb(back,close_settings_clicked,LV_EVENT_CLICKED,nullptr);
+
 
     lv_obj_t *battery_title =
         make_label(s_ui.control_panel, "设备电量", s_cjk_font,
                    lv_color_hex(0x8E98A8));
-    lv_obj_align(battery_title, LV_ALIGN_BOTTOM_LEFT, 34, -26);
+    lv_obj_align(battery_title, LV_ALIGN_BOTTOM_LEFT, 18, -10);
 
     s_ui.battery_label =
         make_label(s_ui.control_panel, "--", s_cjk_title_font,
                    lv_color_white());
-    lv_obj_align(s_ui.battery_label, LV_ALIGN_BOTTOM_RIGHT, -34, -22);
+    lv_obj_align(s_ui.battery_label, LV_ALIGN_BOTTOM_RIGHT, -18, -10);
 }
 
-static void xiaozhi_nav(lv_event_t *event)
+static void main_nav(lv_event_t *event)
 {
     show_main_page((main_page_t)(intptr_t)lv_event_get_user_data(event));
 }
 
-static void speak_clicked(lv_event_t *) { voice_service_click(); }
 static void device_clicked(lv_event_t *event){ha_devices_toggle((unsigned)(intptr_t)lv_event_get_user_data(event));}
 static void devices_refresh_clicked(lv_event_t *){ha_devices_refresh();}
 
-static void voice_timer(lv_timer_t *)
+static void devices_timer(lv_timer_t *)
 {
-    static uint32_t last_revision = UINT32_MAX;
-    voice_snapshot_t state;
-    voice_service_snapshot(&state);
-    if (last_revision != state.revision) {
-        last_revision = state.revision;
-        xiaozhi_view_update(state.state, state.text);
-    }
+    if(s_screen_off)return;
     static uint32_t devices_revision=UINT32_MAX;
     ha_devices_snapshot_t devices;ha_devices_snapshot(&devices);
     if(devices_revision!=devices.revision){
@@ -687,14 +743,9 @@ static void voice_timer(lv_timer_t *)
     }
 }
 
-static void build_xiaozhi_screen(void)
-{
-    s_ui.xiaozhi_screen = xiaozhi_view_create(xiaozhi_nav, speak_clicked);
-    lv_obj_add_event_cb(s_ui.xiaozhi_screen, screen_gesture_cb, LV_EVENT_GESTURE, NULL);
-}
 static void build_devices_screen(void)
 {
-    s_ui.devices=devices_view_create(xiaozhi_nav,device_clicked,devices_refresh_clicked);
+    s_ui.devices=devices_view_create(main_nav,device_clicked,devices_refresh_clicked);
     lv_obj_add_event_cb(s_ui.devices.screen,screen_gesture_cb,LV_EVENT_GESTURE,nullptr);
 }
 
@@ -787,7 +838,7 @@ static void ui_self_test(lv_timer_t *timer)
         lv_obj_send_event(s_ui.brightness_slider, LV_EVENT_VALUE_CHANGED, NULL);
         if (action == 181) lv_obj_remove_state(s_ui.brightness_slider, LV_STATE_PRESSED);
     } else if (action < 206) {
-        show_main_page(MAIN_PAGE_XIAOZHI);
+        show_main_page(MAIN_PAGE_DEVICES);
         show_main_page((main_page_t)(action % MAIN_PAGE_COUNT));
     } else {
         show_main_page((main_page_t)(action - 206));
@@ -805,6 +856,7 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
         return ESP_ERR_INVALID_ARG;
     }
     s_ui_settings = *settings;
+    s_last_activity=lv_tick_get();
     s_ui.applied_brightness = -1;
 
     esp_lv_adapter_config_t adapter_config = ESP_LV_ADAPTER_DEFAULT_CONFIG();
@@ -830,6 +882,8 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
         if (touch == NULL) {
             ESP_LOGW(TAG, "Touch registration failed");
         } else {
+            s_touch_read=lv_indev_get_read_cb(touch);
+            lv_indev_set_read_cb(touch,power_touch_read);
             lv_indev_set_gesture_min_distance(touch, 36);
             lv_indev_set_gesture_min_velocity(touch, 4);
         }
@@ -838,18 +892,14 @@ esp_err_t clock_ui_start(const clock_settings_t *settings)
 
     if (esp_lv_adapter_lock(-1) == ESP_OK) {
         build_clock_screen();
-        build_xiaozhi_screen();
         build_devices_screen();
         build_energy_screen();
         build_control_screen();
-#if CONFIG_DESK_CLOCK_VOICE_SELF_TEST
-        show_main_page(MAIN_PAGE_XIAOZHI);
-#else
         show_main_page(MAIN_PAGE_CLOCK);
-#endif
+
         update_clock();
         lv_timer_create(clock_timer, 1000, NULL);
-        lv_timer_create(voice_timer, 100, NULL);
+        lv_timer_create(devices_timer, 100, NULL);
 #if CONFIG_DESK_CLOCK_UI_SELF_TEST
         lv_timer_create(ui_self_test, 60, NULL);
 #endif
@@ -865,6 +915,8 @@ void clock_ui_toggle_view(void)
     if (esp_lv_adapter_lock(100) != ESP_OK) {
         return;
     }
+    const bool was_off=s_screen_off;wake_screen();
+    if(was_off){esp_lv_adapter_unlock();return;}
     if (lv_screen_active() == s_ui.control_screen) {
         close_control_screen();
     } else {
@@ -886,6 +938,7 @@ void clock_ui_show_clock(void)
 
 void clock_ui_auto_rotate_update(void)
 {
+    if(s_screen_off)return;
 #if CONFIG_DESK_CLOCK_UI_SELF_TEST
     return; // The test owns rotation while it exercises each pose.
 #endif

@@ -39,12 +39,6 @@ typedef struct {
 } board_display_t;
 
 esp_err_t board_init(void);
-esp_err_t board_audio_init(void);
-esp_err_t board_audio_record_start(void);
-esp_err_t board_audio_read(int16_t *samples, size_t count);
-esp_err_t board_audio_play_start(uint32_t rate);
-esp_err_t board_audio_write(const int16_t *samples, size_t count);
-void board_audio_stop(void);
 const board_display_t *board_display(void);
 
 esp_err_t board_set_backlight(uint8_t percent);
@@ -58,3 +52,5 @@ esp_err_t board_auto_rotation_update(board_rotation_t *rotation, bool *changed);
 #ifdef __cplusplus
 }
 #endif
+
+esp_err_t board_power_external(bool *connected);

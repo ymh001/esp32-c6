@@ -16,13 +16,6 @@ add_executable(energy_view_test main.cpp
 target_include_directories(energy_view_test PRIVATE "${FIRMWARE}/components/clock_ui/include")
 target_link_libraries(energy_view_test PRIVATE lvgl)
 
-add_executable(xiaozhi_view_preview xiaozhi_main.cpp
-    "${FIRMWARE}/components/clock_ui/xiaozhi_view.cpp"
-    "${FIRMWARE}/components/clock_ui/fonts/clock_cjk_16.c"
-    "${FIRMWARE}/components/clock_ui/fonts/clock_cjk_24.c"
-    "${FIRMWARE}/components/clock_ui/fonts/clock_cjk_32.c")
-target_include_directories(xiaozhi_view_preview PRIVATE "${FIRMWARE}/components/clock_ui/include")
-target_link_libraries(xiaozhi_view_preview PRIVATE lvgl)
 
 add_executable(devices_view_test devices_main.cpp
     "${FIRMWARE}/components/clock_ui/devices_view.cpp"

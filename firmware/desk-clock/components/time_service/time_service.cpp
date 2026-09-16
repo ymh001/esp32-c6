@@ -1,3 +1,4 @@
+#include "wifi_manager.h"
 #include "time_service.h"
 
 #include <stdlib.h>
@@ -124,6 +125,10 @@ void time_service_get_local(struct tm *out)
 
 void time_service_process(void)
 {
+    static bool was_connected;
+    const bool connected=wifi_manager_is_connected();
+    if(connected && !was_connected && s_sntp_started)esp_netif_sntp_start();
+    was_connected=connected;
     portENTER_CRITICAL(&s_sync_lock);
     const bool pending = s_rtc_write_pending;
     s_rtc_write_pending = false;

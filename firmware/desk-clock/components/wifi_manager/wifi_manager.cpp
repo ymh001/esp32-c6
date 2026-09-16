@@ -1,6 +1,7 @@
 #include "wifi_manager.h"
 
 #include <atomic>
+#include "nvs.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -47,6 +48,8 @@ static std::atomic<wifi_manager_state_t> s_state{WIFI_MANAGER_IDLE};
 static std::atomic<bool> s_connect_requested{false};
 static int s_retry_count;
 static size_t s_network_index;
+static char s_last_ssid[33];
+static bool s_initialized;
 static size_t s_network_attempt_count;
 static portMUX_TYPE s_ip_lock = portMUX_INITIALIZER_UNLOCKED;
 static char s_ip[16] = "0.0.0.0";
@@ -165,6 +168,15 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     }
 
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        if (!s_connect_requested) return;
+        if (strcmp(s_last_ssid, s_networks[s_network_index].ssid)) {
+            nvs_handle_t nvs;
+            if(nvs_open("wifi_last",NVS_READWRITE,&nvs)==ESP_OK){
+                if(nvs_set_str(nvs,"ssid",s_networks[s_network_index].ssid)==ESP_OK && nvs_commit(nvs)==ESP_OK)
+                    strlcpy(s_last_ssid,s_networks[s_network_index].ssid,sizeof(s_last_ssid));
+                nvs_close(nvs);
+            }
+        }
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
         char ip[16];
         snprintf(ip, sizeof(ip), IPSTR, IP2STR(&event->ip_info.ip));
@@ -231,6 +243,7 @@ static void connect_task(void *arg)
     (void)arg;
 
     s_network_index = 0;
+    for(size_t i=0;i<s_network_count;++i)if(!strcmp(s_last_ssid,s_networks[i].ssid)){s_network_index=i;break;}
     s_network_attempt_count = 0;
     ESP_LOGI(TAG, "Connecting to %s Wi-Fi '%s'", network_role(s_network_index),
              s_networks[s_network_index].ssid);
@@ -254,7 +267,8 @@ static void connect_task(void *arg)
 
 esp_err_t wifi_manager_start(void)
 {
-    esp_err_t err = initialize_wifi();
+    if (s_connect_requested) return ESP_OK;
+    esp_err_t err = s_initialized ? ESP_OK : initialize_wifi();
     if (err != ESP_OK) {
         set_state(WIFI_MANAGER_ERROR);
         ESP_LOGE(TAG, "Wi-Fi initialization failed: %s",
@@ -262,12 +276,28 @@ esp_err_t wifi_manager_start(void)
         return err;
     }
 
+    if (!s_initialized) {
+        s_initialized=true;
+        nvs_handle_t nvs;size_t len=sizeof(s_last_ssid);
+        if(nvs_open("wifi_last",NVS_READONLY,&nvs)==ESP_OK){nvs_get_str(nvs,"ssid",s_last_ssid,&len);nvs_close(nvs);}
+    }
+    s_connect_requested=true;
     if (xTaskCreate(connect_task, "wifi_connect", 4096, NULL, 5, NULL) !=
         pdPASS) {
         set_state(WIFI_MANAGER_ERROR);
+        s_connect_requested=false;
         return ESP_ERR_NO_MEM;
     }
     return ESP_OK;
+}
+
+void wifi_manager_stop(void)
+{
+    s_connect_requested=false;
+    if(s_reconnect_timer)esp_timer_stop(s_reconnect_timer);
+    esp_wifi_stop();
+    set_state(WIFI_MANAGER_IDLE);
+    ESP_LOGI(TAG,"Wi-Fi stopped for power saving");
 }
 
 wifi_manager_state_t wifi_manager_state(void)

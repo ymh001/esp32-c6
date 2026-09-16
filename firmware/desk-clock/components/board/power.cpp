@@ -47,7 +47,7 @@ esp_err_t board_power_init(void)
     } writes[] = {
         {0x22, 0x06}, {0x27, 0x10}, {0x80, 0x01}, {0x90, 0x00},
         {0x91, 0x00}, {0x82, 18},   {0x92, 28},   {0x93, 28},
-        {0x94, 28},   {0x95, 28},   {0x90, 0x0f}, {0x64, 0x03},
+        {0x94, 28},   {0x95, 28},   {0x90, 0x0c}, {0x64, 0x03},
         {0x61, 0x02}, {0x62, 0x0a},
         // REG63 bit 4 enables termination; low nibble 1 keeps the 25mA limit.
         {0x63, 0x11},
@@ -141,4 +141,12 @@ esp_err_t board_display_reset(void)
     if (err != ESP_OK) return err;
     vTaskDelay(pdMS_TO_TICKS(100));
     return ESP_OK;
+}
+
+esp_err_t board_power_external(bool *connected)
+{
+    if(!connected || !s_pmic)return ESP_ERR_INVALID_ARG;
+    uint8_t status=0;esp_err_t err=board_i2c_read_reg(s_pmic,0,&status,1);
+    if(err==ESP_OK)*connected=(status & 0x20)!=0;
+    return err;
 }

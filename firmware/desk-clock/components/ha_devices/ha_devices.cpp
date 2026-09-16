@@ -1,5 +1,5 @@
 #include "ha_devices.h"
-#include "voice_credentials.h"
+#include "ha_credentials.h"
 #include "esp_crt_bundle.h"
 #include "network_gate.h"
 #include "wifi_manager.h"
@@ -38,14 +38,13 @@ void ha_devices_refresh(void){refresh_requested=true;}
 static bool request(const char *path,const char *body,cJSON **result)
 {
     if(result)*result=nullptr;
-    if(!wifi_manager_is_connected())return false;
     NetworkLease network(pdMS_TO_TICKS(15000));
     if(!network)return false;
     char url[256];snprintf(url,sizeof(url),HA_HTTP_BASE_URL "%s",path);
     esp_http_client_config_t config={};config.url=url;config.timeout_ms=5000;
     config.crt_bundle_attach=esp_crt_bundle_attach;config.buffer_size=1024;config.disable_auto_redirect=true;
     auto h=esp_http_client_init(&config);if(!h)return false;
-    esp_http_client_set_header(h,"Authorization","Bearer " HA_VOICE_TOKEN);
+    esp_http_client_set_header(h,"Authorization","Bearer " HA_TOKEN);
     if(body){esp_http_client_set_method(h,HTTP_METHOD_POST);esp_http_client_set_header(h,"Content-Type","application/json");}
     const int length=body?strlen(body):0;
     bool ok=esp_http_client_open(h,length)==ESP_OK;
@@ -82,7 +81,10 @@ static bool refresh_one(unsigned index)
 static void refresh_all(void)
 {
     portENTER_CRITICAL(&mux);state.refreshing=true;++state.revision;portEXIT_CRITICAL(&mux);
-    bool ok=true;for(unsigned i=0;i<HA_DEVICE_COUNT;++i)if(!refresh_one(i))ok=false;
+    message(wifi_manager_is_connected()?"正在更新设备状态…":"正在唤醒 WiFi…");
+    NetworkLease batch(pdMS_TO_TICKS(15000));
+    bool ok=(bool)batch;
+    if(batch)for(unsigned i=0;i<HA_DEVICE_COUNT;++i)if(!refresh_one(i))ok=false;
     portENTER_CRITICAL(&mux);state.refreshing=false;++state.revision;portEXIT_CRITICAL(&mux);
     message(ok ? "上下滑动查看 · 点击开关控制" : "连接失败，点刷新重试");
     ESP_LOGI(TAG,"State refresh: %s",ok ? "complete" : "failed");
@@ -104,7 +106,12 @@ void ha_devices_toggle(unsigned index)
 }
 static void control(const command_t &command)
 {
-    message("正在切换设备…");
+    message(wifi_manager_is_connected()?"正在切换设备…":"正在唤醒 WiFi…");
+    NetworkLease operation(pdMS_TO_TICKS(15000));
+    if(!operation){
+        portENTER_CRITICAL(&mux);state.devices[command.index].busy=false;state.devices[command.index].error=true;++state.revision;portEXIT_CRITICAL(&mux);
+        message("WiFi 连接超时，点击开关重试");return;
+    }
     char path[80],body[192];
     snprintf(path,sizeof(path),"/api/services/%s/turn_%s",DEVICE_CATALOG[command.index].domain,command.on?"on":"off");
     snprintf(body,sizeof(body),"{\"entity_id\":\"%s\"}",DEVICE_CATALOG[command.index].entity);
@@ -125,38 +132,13 @@ static void control(const command_t &command)
 }
 static void task(void *)
 {
-    int64_t last_refresh=0;
-    bool connected=false;
-#if CONFIG_DESK_CLOCK_VOICE_LAMP_TEST
-    bool lamp_test_done=false;
-#endif
     for(;;){
         command_t command;
         if(xQueueReceive(commands,&command,pdMS_TO_TICKS(200))==pdTRUE)control(command);
-        if(!wifi_manager_is_connected()){
-            if(connected){
-                portENTER_CRITICAL(&mux);
-                for(auto &device:state.devices)device.power=DEVICE_UNAVAILABLE;
-                ++state.revision;portEXIT_CRITICAL(&mux);
-            }
-            connected=false;message("等待 WiFi 连接…");continue;
-        }
-        if(!connected){connected=true;refresh_requested=true;}
-        if(refresh_requested.exchange(false) || (visible && esp_timer_get_time()-last_refresh>15000000)){
-            refresh_all();last_refresh=esp_timer_get_time();
-#if CONFIG_DESK_CLOCK_VOICE_LAMP_TEST
-            if(!lamp_test_done){
-                lamp_test_done=true;
-                for(int step=0;step<2;++step){
-                    bool on=step==0;
-                    command_t test={2,on};control(test);
-                    ESP_LOGI(TAG,"Manual lamp test on=%d stack=%u",on,(unsigned)uxTaskGetStackHighWaterMark(nullptr));
-                }
-            }
-#endif
-        }
+        if(refresh_requested.exchange(false))refresh_all();
     }
 }
+
 esp_err_t ha_devices_init(void)
 {
     commands=xQueueCreate(HA_DEVICE_COUNT,sizeof(command_t));

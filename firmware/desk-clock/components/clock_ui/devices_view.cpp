@@ -77,7 +77,7 @@ devices_view_t devices_view_create(lv_event_cb_t navigate,lv_event_cb_t toggle,l
         lv_obj_remove_flag(knob,LV_OBJ_FLAG_CLICKABLE);
         lv_obj_add_state(button,LV_STATE_DISABLED);
     }
-    main_navigation_create(view.screen,2,navigate);
+    main_navigation_create(view.screen,1,navigate);
     return view;
 }
 void devices_view_update(devices_view_t *view,const devices_view_data_t *data)

@@ -27,6 +27,9 @@ void clock_settings_defaults(clock_settings_t *settings)
             sizeof(settings->ntp_server_1));
     strlcpy(settings->ntp_server_2, "time.cloudflare.com",
             sizeof(settings->ntp_server_2));
+    settings->sync_minutes = 15;
+    settings->screen_off_seconds = 30;
+    settings->stay_awake_on_power = 1;
     settings->use_24_hour = 1;
     settings->brightness = 80;
     settings->night_brightness = 20;
@@ -68,6 +71,9 @@ esp_err_t clock_settings_load(clock_settings_t *settings)
                 sizeof(settings->ntp_server_1));
     load_string(handle, "ntp2", settings->ntp_server_2,
                 sizeof(settings->ntp_server_2));
+    nvs_get_u8(handle, "sync_min", &settings->sync_minutes);
+    nvs_get_u8(handle, "screen_off", &settings->screen_off_seconds);
+    nvs_get_u8(handle, "plug_awake", &settings->stay_awake_on_power);
     nvs_get_u8(handle, "use24h", &settings->use_24_hour);
     nvs_get_u8(handle, "brightness", &settings->brightness);
     nvs_get_u8(handle, "night_bright", &settings->night_brightness);
@@ -76,7 +82,11 @@ esp_err_t clock_settings_load(clock_settings_t *settings)
 
     nvs_close(handle);
 
-    settings->use_24_hour = settings->use_24_hour != 0;
+    const unsigned sync = settings->sync_minutes, off = settings->screen_off_seconds;
+    if(sync!=0 && sync!=1 && sync!=5 && sync!=15 && sync!=30 && sync!=60)settings->sync_minutes=15;
+    if(off!=0 && off!=5 && off!=15 && off!=30 && off!=60)settings->screen_off_seconds=30;
+    settings->stay_awake_on_power=!!settings->stay_awake_on_power;
+    settings->use_24_hour = 1; // Migrate any saved 12-hour preference.
     if (settings->brightness < 10 || settings->brightness > 100) {
         settings->brightness = 80;
     }
@@ -121,6 +131,9 @@ esp_err_t clock_settings_save(const clock_settings_t *settings)
     if (err == ESP_OK) err = nvs_set_u8(handle, "night_bright", settings->night_brightness);
     if (err == ESP_OK) err = nvs_set_u8(handle, "night_start", settings->night_start_hour);
     if (err == ESP_OK) err = nvs_set_u8(handle, "night_end", settings->night_end_hour);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "sync_min", settings->sync_minutes);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "screen_off", settings->screen_off_seconds);
+    if (err == ESP_OK) err = nvs_set_u8(handle, "plug_awake", settings->stay_awake_on_power);
     if (err == ESP_OK) err = nvs_commit(handle);
     nvs_close(handle);
     return err;

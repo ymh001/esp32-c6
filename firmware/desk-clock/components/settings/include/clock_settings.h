@@ -12,6 +12,9 @@ typedef struct {
     char timezone[CLOCK_TIMEZONE_MAX];
     char ntp_server_1[CLOCK_NTP_SERVER_MAX];
     char ntp_server_2[CLOCK_NTP_SERVER_MAX];
+    uint8_t sync_minutes; // 0 = always online
+    uint8_t screen_off_seconds; // 0 = never
+    uint8_t stay_awake_on_power;
     uint8_t use_24_hour;
     uint8_t brightness;
     uint8_t night_brightness;

@@ -104,7 +104,7 @@ energy_view_t energy_view_create(lv_event_cb_t refresh_callback, lv_event_cb_t n
     lv_obj_align(view.refresh_label, LV_ALIGN_CENTER, 23, 0);
     view.updated = label(view.screen, "尚未更新", &clock_cjk_16, 0, 0);
     lv_obj_align(view.updated, LV_ALIGN_TOP_MID, 0, 59);
-    main_navigation_create(view.screen,3,navigate);
+    main_navigation_create(view.screen,2,navigate);
     return view;
 }
 

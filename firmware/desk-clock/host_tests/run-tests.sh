@@ -31,8 +31,10 @@ c++ -std=c++17 -Wall -Wextra -Werror \
 "$BUILD_DIR/test_battery"
 
 c++ -std=c++17 -Wall -Wextra -Werror \
-    -I"$ROOT/components/voice_service/include" \
-    "$ROOT/components/voice_service/voice_text.cpp" \
-    "$ROOT/host_tests/test_voice_text.cpp" \
-    -o "$BUILD_DIR/test_voice_text"
-"$BUILD_DIR/test_voice_text"
+    -I"$ROOT/host_tests/power_stubs" \
+    -I"$ROOT/components/network_gate/include" \
+    -I"$ROOT/components/wifi_manager/include" \
+    "$ROOT/components/network_gate/network_gate.cpp" \
+    "$ROOT/host_tests/test_network_power.cpp" \
+    -o "$BUILD_DIR/test_network_power"
+"$BUILD_DIR/test_network_power"

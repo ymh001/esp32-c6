@@ -14,3 +14,5 @@ components/wifi_manager/include/wifi_credentials.h
 components/energy_service/include/energy_credentials.h
 
 components/energy_service/include/grafana_credentials.h
+
+components/ha_devices/include/ha_credentials.h

@@ -5,24 +5,4 @@ config DESK_CLOCK_UI_SELF_TEST
     help
         Exercise brightness, page navigation, all screens and rotations.
         Restores the loaded settings after the test. Disable for normal use.
-config DESK_CLOCK_VOICE_SELF_TEST
-    bool "Test microphone and read-only HA voice queries at boot"
-    default n
-    help
-        Tests the codec, then sends a prerecorded Chinese state query and plays
-        HA's replies. Does not send microphone recordings. Queries are read-only
-        unless the separate, explicitly authorized lamp-test option is enabled.
-        Disable for normal use.
-config DESK_CLOCK_VOICE_SELF_TEST_RUNS
-    int "Number of read-only voice test turns"
-    depends on DESK_CLOCK_VOICE_SELF_TEST
-    range 1 30
-    default 3
-config DESK_CLOCK_VOICE_LAMP_TEST
-    bool "Use screen-lamp on/off commands instead of read-only queries"
-    depends on DESK_CLOCK_VOICE_SELF_TEST
-    default n
-    help
-        Only enable when the owner has authorized toggling the screen lamp.
-        Alternates on and off; use an even number of test turns.
 endmenu

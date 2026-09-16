@@ -17,3 +17,7 @@ public:
 private:
     bool held_;
 };
+
+void network_set_sync_minutes(unsigned minutes);
+unsigned network_sync_minutes(void);
+bool network_process(void);

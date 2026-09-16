@@ -4,41 +4,32 @@ ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 
 ## Current Features
 
-- 480 x 480 AMOLED clock with a unified Source Han Sans display, Gregorian
-  date, weekday, and lunar date.
-- Local Chinese lunar conversion and 24 solar terms for 1902 through 2099.
-- Traditional lunar festivals and common Gregorian holidays.
-- Full Gregorian month view with lunar day, solar term, or festival in each
-  cell.
-- Shared I2C support for AXP2101, PCF85063, and CST9220.
-- PCF85063 startup time and SNTP synchronization.
-- Compile-time primary/backup Wi-Fi credentials with automatic failover,
-  reconnect, and SNTP startup after a network is available.
-- Electricity page with today, current week, current month, and remaining kWh.
-- Automatic electricity refresh every hour plus a manual refresh.
-- NVS persistence for local clock preferences.
-- Automatic four-way screen rotation based on the onboard QMI8658
-  accelerometer, including touch-coordinate rotation.
-- Automatic day and night brightness.
-- Two-pixel QSPI redraw alignment to prevent sheared or slanted partial updates.
-- A rounded-screen safe layout for the calendar controls and grid.
-- A dense clock layout with a 96 px time display and a full-width seven-day
-  Gregorian and lunar strip.
+- 480 × 480 AMOLED clock, fixed 24-hour display, Gregorian and lunar week strip.
+- Three pages: clock, manual HA devices, Grafana electricity. Voice is removed.
+- Six manual switches: living-room light, bedroom light, screen lamp, fan, air
+  conditioner and printer. Scroll the list; only the separate switches send commands.
+- Grafana supplies today's kWh, today's cost and remaining credit.
+- ESP32-C6 dynamic CPU frequency: 40–160 MHz. Automatic light sleep is disabled.
+- One global sync interval: always online, 1 / 5 / 15 / 30 / 60 minutes. Default
+  15 minutes. Always-online mode refreshes once per minute.
+- Scheduled HA and energy refreshes share Wi-Fi. It stops 30 seconds after the
+  last request; manual refresh/control wakes Wi-Fi with a bounded connection wait.
+- NVS remembers the last successful Wi-Fi SSID and the control-center settings.
+- Automatic screen-off: 5 / 15 / 30 / 60 seconds or never; default 30 seconds.
+  Stay awake on external power is enabled by default, using VBUS presence.
+- First touch or KEY wakes the screen without triggering a switch or page change.
+- Four-way screen rotation, day/night brightness, RTC and SNTP synchronization.
 
 ## Controls
 
-- Swipe left or right anywhere on the screen to cycle through the clock,
-  calendar, and electricity pages.
-- Use `<` and `>` to change months.
-- Swipe down from any main page to open the control screen, or use the gear
-  button on the electricity page.
-- The control panel opens immediately. Tap or drag anywhere on the pill-shaped
-  brightness track, then swipe up to return. Device battery percentage is shown
-  below.
-- Press KEY (GPIO10) as an optional hardware shortcut to toggle between the
-  main pages.
-- Rotate the device in 90-degree steps; the display and touch input follow the
-  current upright orientation after a short debounce.
+- Use the bottom navigation for clock, devices and electricity.
+- Swipe horizontally on clock/energy to change pages. The device list scrolls
+  vertically; tapping a device name does not toggle it.
+- Swipe down on clock/energy to open controls: brightness, sync interval,
+  screen-off timeout and stay-awake-on-power. Tap Return or swipe up to close.
+- Manual device operations and the energy refresh button wake Wi-Fi as needed.
+  Device switches show the last confirmed HA state while Wi-Fi is asleep.
+- Press KEY (GPIO10) to cycle pages, or wake an off screen.
 
 ## Wi-Fi Configuration
 
@@ -52,7 +43,7 @@ edit these values in `components/wifi_manager/include/wifi_credentials.h`:
 #define DESK_CLOCK_WIFI_BACKUP_PASSWORD "your-backup-password"
 ```
 
-The device tries the primary network first. After three failed connection
+The device tries the last successful SSID first (primary on first boot). After three failed connection
 attempts it switches to the backup network, alternating between the two on
 subsequent failures. Then rebuild and flash. The device no longer starts a
 setup hotspot or serves a configuration page.
@@ -149,7 +140,7 @@ The generated DOT Matrix and Chinese subset fonts are stored under
 
 In `idf.py menuconfig`, enable **Desk clock diagnostics → Run UI stress test
 at boot**, then build and flash. The test sweeps 10–100% brightness in both
-directions in all four rotations (728 value changes), changes months 96 times,
+directions in all four rotations (728 value changes), changes pages 96 times,
 and refreshes every page on the real panel. It checks LVGL/system heap
 integrity and requires completed panel transfers. Allow about 90 seconds and
 look for `UI SELF TEST PASS`, with no watchdog or DMA timeout errors.
@@ -158,72 +149,27 @@ The test restores the loaded settings. Disable the diagnostic option and
 build/flash again for normal use. Physical touch gestures and extended uptime
 still need device testing. See `audit/2026-09-15-review.md` for the review.
 
-## Electricity page
+## 手动设备与凭据
 
-The electricity page highlights today's consumption in green, with remaining,
-weekly and monthly kWh below. A blue status label distinguishes refreshing,
-success, partial success and failure; the footer shows the last successful
-summary update time. Failed requests retain the previous readings. The bottom
-refresh button has a 432×70 pixel touch target and ignores repeated requests
-while an update is pending. Swipe down to reach brightness controls.
+设备页保留客厅灯、卧室灯、屏幕挂灯、风扇、空调、打印机，使用独立开关，
+指令发送后回读 HA 确认状态。进入设备页和点击刷新会立即更新；周期更新由全局同步间隔控制。
+主动关闭 WiFi 时保留上次状态。卡片与滑动操作不会触发开关。
 
-`components/clock_ui/energy_view.cpp` owns the layout. Its headless test uses the
-same LVGL version and fonts as the firmware:
+设备目录：`components/ha_devices/include/device_catalog.h`，追加条目后列表自动滚动扩展。
+将 `components/ha_devices/include/ha_credentials.h.example` 复制为 `ha_credentials.h`，
+填写 HA HTTPS 地址和访问令牌。实际凭据文件被 Git 忽略。
+原有本地语音配置已迁移至该私有文件，固件不再依赖 Assist、Whisper 或 Piper。
 
-```bash
-bash host_tests/run-energy-view-tests.sh
-```
+## 耗电页（Grafana）
 
-The test checks empty readings, success, busy/disabled, failed and partial
-states, numeric bounds, callback dispatch, and heap integrity. It also writes a
-480×480 PPM of the actual layout. A PNG reference is in `docs/energy-view.png`.
+只展示今日耗电、今日电费、剩余电费，使用 Grafana HTTPS 只读查询 NAS 数据库，
+不携带电量网站凭据，不自行计算金额。跟随全局同步间隔，刷新按钮立即唤醒联网读取。
+失败保留旧数据；超过两小时的源数据标记为较旧，跨日未更新时今日项为空。
+模板为 `components/energy_service/include/grafana_credentials.example.h`，部署契约见
+仓库 `deploy/grafana-screen/`。HA 与 Grafana HTTPS 均校验服务器证书。
 
-## 本地语音助手
+运行 `bash host_tests/run-energy-view-tests.sh` 验证实际 LVGL 能源与设备布局、
+状态显示、刷新回调和设备开关滑动防误触。`bash host_tests/run-tests.sh` 还验证网络
+同步档位、并发使用互斥、延迟关闭、临时唤醒及连接超时后的重试。
 
-小智页面直接连接本地 Home Assistant Assist。点击说话开始录音，再点一次结束，
-最长 8 秒；识别结果和回复显示在页面中，Piper 语音由板载扬声器播放。
-麦克风与扬声器采用轮流工作的方式，播放回复时不录音；暂不支持唤醒词和语音打断。
-
-构建前将 `components/voice_service/include/voice_credentials.example.h` 复制为同目录的
-`voice_credentials.h`，填入 HA 地址、中文 Assist pipeline ID 和设备专用访问令牌。
-该凭据文件被 Git 忽略。HA 必须已配置 Whisper、Piper，且设备已向 Assist 暴露。
-部署与测试记录见 `audit/2026-09-15-local-voice.md`。
-
-ESP-IDF 5.5.2 的 WebSocket 接收有缓存轮询缺陷：HA 授权消息与 HTTP 101
-一同到达时可能被搁置，导致连接超时。构建通过
-`cmake/fix_ws_buffered_read.cmake` 修正轮询和帧头读取两处逻辑，只编译项目内
-生成的副本，不改共享 IDF。升级 IDF 后若补丁匹配失败，需要重新审查这两处。
-
-构建后运行 `python3 host_tests/test_ws_buffered_read.py` 验证实际编译的读取逻辑。
-开启 `CONFIG_DESK_CLOCK_VOICE_SELF_TEST` 可测试麦克风、播报，以及三次预录的
-“客厅灯开着吗”查询；日常固件应保持关闭。
-
-## 手动设备页
-
-从底栏进入“设备”，上下滑动设备列表。点击客厅灯、卧室灯、屏幕挂灯、风扇、空调或打印机右侧独立开关控制。
-绿色表示已开启，灰色表示已关闭；操作后回读 HA 确认状态。右上角可刷新，停留时每 15 秒自动同步。
-卡片本身不触发控制，拖动经过开关也不会切换。设备目录位于 `components/ha_devices/include/device_catalog.h`，追加条目后列表与状态数组自动扩展。
-
-### 本地凭据
-
-首次编译前，将 WiFi、耗电服务和语音服务各自 `include/` 目录下的
-`*_credentials.example.h` 复制为 `*_credentials.h` 并填写本地配置。
-实际凭据文件已加入忽略规则，不随代码提交；现有本地配置保持可用。
-
-## 外网访问
-
-屏幕设备控制使用 `https://ha.hz.leaflab.cn:8888`，Assist 使用同域名的 WSS
-连接，TTS 文件也从该 HTTPS 入口下载，均验证服务器证书。配置位于忽略的
-`components/voice_service/include/voice_credentials.h`，可参考同目录模板。
-
-HA 在 NAS 内网连接 Whisper `192.168.3.2:10300`、Piper `192.168.3.2:10200`。
-这两个 Wyoming TCP 服务无需对外开放，不能直接替换为普通 HTTPS 反代地址。
-屏幕在外网需连接已配置的 WiFi；HA 反代必须支持 WebSocket 升级。
-
-## 当前耗电页（Grafana）
-
-仅展示今日耗电、今日电费、剩余电费。屏幕通过 Grafana HTTPS 只读查询 NAS 数据库，
-不再携带或使用原电量网站凭据，也不自行计算金额。每 10 分钟读取，按钮立即重读。
-NAS 持久采集和历史不受固件刷新影响；超过两小时的源数据标为较旧，跨日未更新时今日项为空。
-配置模板：`components/energy_service/include/grafana_credentials.example.h`。
-部署契约见仓库 `deploy/grafana-screen/`。
+实机验证记录见 `audit/2026-09-17-power-saving.md`。

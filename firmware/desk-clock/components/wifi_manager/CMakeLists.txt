@@ -6,4 +6,5 @@ idf_component_register(
         esp_netif
     PRIV_REQUIRES
         esp_timer
+        nvs_flash
 )
