@@ -1,5 +1,7 @@
 # Desk Clock
 
+这是本仓库的**旧版独立固件**，源码与历史保留。新版手机应用桌面风格固件见 [Pocket Home](../pocket-home/README.md)。两者面向同一硬件，分别构建和烧录；本目录不因新版发布而搬迁或覆盖。
+
 ESP-IDF firmware for the Waveshare ESP32-C6-Touch-AMOLED-2.16 board.
 
 ## Current Features

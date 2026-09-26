@@ -1,0 +1,9 @@
+build/
+build-host/
+sdkconfig
+sdkconfig.old
+managed_components/
+config.local.h
+firmware_backup/
+*.log
+__pycache__/
