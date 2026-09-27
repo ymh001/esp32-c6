@@ -93,7 +93,7 @@ USB 串口诊断（115200，换行结尾）：`status`、`home`、`clock`、`ene
 
 ## v0.2.3：SD 卡读写
 
-**验证状态：代码和主机文件测试通过，当前插入的实卡初始化仍失败，尚未完成实卡写入/回读验证。**
+**验证状态：代码和主机文件测试通过；重新连接设备后，32 GB 实卡挂载、6 次 8 KB 写入/回读校验和卸载重挂通过。**
 排查记录见 `releases/pocket-home/v0.2.3/VALIDATION.md`（仓库根目录下）。
 
 卡槽使用 SPI2，与 AMOLED 共用 GPIO0/1/2，SD CS 为 GPIO6，LCD CS 为 GPIO15。
