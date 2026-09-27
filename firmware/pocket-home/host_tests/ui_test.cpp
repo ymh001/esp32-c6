@@ -22,7 +22,7 @@ static TransferSnapshot transfer;
 bool transfer_enabled(){return transfer.enabled;}
 bool transfer_busy(){return transfer.busy;}
 TransferSnapshot transfer_snapshot(){return transfer;}
-bool transfer_enable(bool enabled){transfer.enabled=transfer.running=enabled;strcpy(transfer.code,"12345678");return true;}
+bool transfer_enable(bool enabled){transfer.enabled=transfer.running=enabled;strcpy(transfer.code,"123456");return true;}
 
 BatterySnapshot battery_snapshot() { return {true, 85, 4050}; }
 static EnergySnapshot energy;
@@ -191,7 +191,7 @@ int main() {
   page("control");
   snap("control");
   tap(402,394);step(1100);assert(transfer.enabled);
-  assert(has_text(lv_screen_active(),"http://192.168.3.129 · 码 12345678"));
+  assert(has_text(lv_screen_active(),"123456"));
   snap("control-transfer");
   tap(110,393);assert(transfer.enabled); // Label must not toggle the switch.
   tap(402,394);step(1100);assert(!transfer.enabled);

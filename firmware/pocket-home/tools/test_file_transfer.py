@@ -35,7 +35,7 @@ def endpoint(name):return '/api/file?name='+urllib.parse.quote(name,safe='')
 try:
  command('status');time.sleep(3);command('transfer-on')
  def connection():
-  command('transfer-status');m=re.findall(r'enabled=1 running=1 busy=\d url=http://([\d.]+)/ code=(\d{8})',log());return m[-1] if m else None
+  command('transfer-status');m=re.findall(r'enabled=1 running=1 busy=\d url=http://([\d.]+)/ code=(\d{6})',log());return m[-1] if m else None
  ip,code=until(connection,45);base='http://'+ip
  print('File server ready',base,flush=True)
  assert api('/api/list?dir=',key='invalid')[0]==401
@@ -67,7 +67,7 @@ try:
  command('transfer-off');time.sleep(4);c.close();command('status');command('transfer-status');time.sleep(1)
  assert 'File server stopped' in log()
  previous=code;command('transfer-on')
- ip,code=until(lambda: ((m[-1][0],m[-1][1]) if (m:=re.findall(r'enabled=1 running=1 busy=\d url=http://([\d.]+)/ code=(\d{8})',log())) and m[-1][1]!=previous else (command('transfer-status') or None)),30)
+ ip,code=until(lambda: ((m[-1][0],m[-1][1]) if (m:=re.findall(r'enabled=1 running=1 busy=\d url=http://([\d.]+)/ code=(\d{6})',log())) and m[-1][1]!=previous else (command('transfer-status') or None)),30)
  assert code!=previous and api('/api/list?dir=',key=previous)[0]==401
  listing=json.loads(api('/api/list?dir=')[1]);assert partial not in [f['name'] for f in listing['files']]
  assert 'SELFTEST PASS: 30' in log()

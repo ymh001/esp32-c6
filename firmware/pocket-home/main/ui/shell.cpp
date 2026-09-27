@@ -411,7 +411,10 @@ void update_transfer() {
   char title[64],detail[128];
   if(t.busy)snprintf(title,sizeof(title),"文件传输 %u%%",t.progress);
   else snprintf(title,sizeof(title),"文件传输");
-  if(t.running&&n.state==NetState::Connected)snprintf(detail,sizeof(detail),"http://%s · 码 %s",n.ip,t.code);
+  const bool show_code=t.running&&n.state==NetState::Connected;
+  lv_obj_set_style_text_font(transfer_detail,show_code?&lv_font_montserrat_32:&clock_cjk_16,0);
+  lv_obj_set_y(transfer_detail,show_code?34:45);
+  if(show_code)snprintf(detail,sizeof(detail),"%s",t.code);
   else snprintf(detail,sizeof(detail),"%s",t.message);
   text_update(transfer_title,title);text_update(transfer_detail,detail);
   lv_obj_set_style_text_color(transfer_detail,lv_color_hex(t.running?GREEN:MUTED),0);

@@ -21,7 +21,7 @@ constexpr uint64_t max_upload=128*1024*1024;
 std::atomic<bool> wanted{false}, alive{false}, running{false}, busy{false};
 std::atomic<unsigned> progress{0};
 std::atomic<int> state{0}; // 0 off, 1 waiting, 2 running, 3 failure
-char code[9]{};
+char code[7]{};
 bool restore_wifi=false, guard=false;
 QueueHandle_t queue=nullptr;SemaphoreHandle_t finished=nullptr;
 files::Job job;
@@ -60,8 +60,8 @@ bool authorized(httpd_req_t *r) {
     if(!usable()){error(r,ECANCELED);return false;}
     char supplied[16]{};
     bool ok=httpd_req_get_hdr_value_str(r,"X-File-Key",supplied,sizeof(supplied))==ESP_OK;
-    unsigned difference=0;for(unsigned i=0;i<8;++i)difference|=(unsigned char)supplied[i]^(unsigned char)code[i];
-    if(!ok||strlen(supplied)!=8||difference){
+    unsigned difference=0;for(unsigned i=0;i<6;++i)difference|=(unsigned char)supplied[i]^(unsigned char)code[i];
+    if(!ok||strlen(supplied)!=6||difference){
         vTaskDelay(pdMS_TO_TICKS(250));
         httpd_resp_set_status(r,"401 Unauthorized");httpd_resp_sendstr(r,"访问码不正确，请查看屏幕控制中心");return false;
     }
@@ -189,7 +189,7 @@ bool transfer_enable(bool enabled){
     if(!queue||!finished){state=3;return false;}
     restore_wifi=!network_snapshot().enabled;
     if(restore_wifi&&!network_enable(true)){state=3;return false;}
-    snprintf(code,sizeof(code),"%08lu",(unsigned long)(esp_random()%100000000));
+    snprintf(code,sizeof(code),"%06lu",(unsigned long)(esp_random()%1000000));
     board_sd_transfer_guard(true);guard=true;wanted=true;alive=true;state=1;
     if(xTaskCreate(server_task,"file_manager",3072,nullptr,2,nullptr)!=pdPASS){wanted=false;alive=false;state=3;return false;}
     return true;
