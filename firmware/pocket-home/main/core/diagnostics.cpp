@@ -1,6 +1,7 @@
 #include "diagnostics.h"
 #include "../ui/shell.h"
 #include "board.h"
+#include "board_sd.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 #include "energy.h"
@@ -10,12 +11,14 @@
 #include <cstring>
 namespace pocket {
 namespace {
-char command[32];
+char command[384];
+bool overflow;
 unsigned length;
 int test_step = -1;
 uint32_t next_step;
 Preferences original;
 void status() {
+  board_sd_status();
   auto n = network_snapshot();
   auto b = battery_snapshot();
   ESP_LOGI("diagnostics", "battery_valid=%d percent=%u voltage_mv=%u", b.valid, b.percent, b.voltage_mv);
@@ -40,6 +43,35 @@ void status() {
            (unsigned)m.free_size);
 }
 void execute() {
+  if(!strncmp(command,"sd-",3)) {
+    if(!strcmp(command,"sd-status")) board_sd_status();
+    else if(!strcmp(command,"sd-ls")) board_sd_list();
+    else if(!strcmp(command,"sd-test")) board_sd_self_test();
+    else if(!strcmp(command,"sd-mount")) board_sd_mount();
+    else if(!strcmp(command,"sd-unmount")) board_sd_unmount();
+    else if(!strncmp(command,"sd-read ",8)) {
+      unsigned char data[512];size_t size=0;
+      int err=board_sd_read(command+8,data,sizeof(data),&size);
+      if(err)ESP_LOGW("sdcard","Read failed: %s",strerror(err));
+      else {
+        ESP_LOGI("sdcard","Read %u bytes (maximum 512)",(unsigned)size);
+        for(size_t offset=0;offset<size;offset+=16){
+          char hex[49]={},ascii[17]={};
+          size_t count=size-offset<16?size-offset:16;
+          for(size_t i=0;i<count;++i){snprintf(hex+i*3,4,"%02X ",data[offset+i]);ascii[i]=data[offset+i]>=32 && data[offset+i]<127?data[offset+i]:'.';}
+          ESP_LOGI("sdcard","%04x  %-48s %s",(unsigned)offset,hex,ascii);
+        }
+      }
+    } else if(!strncmp(command,"sd-write ",9)) {
+      char *text=strchr(command+9,' ');
+      if(!text)ESP_LOGW("sdcard","Usage: sd-write NEW_FILENAME TEXT");
+      else {
+        *text++=0;int err=board_sd_write_new(command+9,text,strlen(text));
+        ESP_LOGI("sdcard","Write new file: %s",err?strerror(err):"OK (synced)");
+      }
+    } else ESP_LOGW("sdcard","Commands: sd-status sd-ls sd-test sd-mount sd-unmount sd-read PATH sd-write NEW_PATH TEXT");
+    return;
+  }
   const char *known[] = {"home",     "clock",   "energy", "control", "wifi",
                          "wifi-off", "wifi-on", "status", "test"};
   bool recognized = false;
@@ -88,11 +120,13 @@ void diagnostics_process() {
   while (usb_serial_jtag_read_bytes(&c, 1, 0) == 1) {
     if (c == '\n' || c == '\r') {
       command[length] = 0;
-      if (length)
-        execute();
-      length = 0;
-    } else if (c >= 32 && c < 127 && length < sizeof(command) - 1)
-      command[length++] = c;
+      if (overflow) ESP_LOGW("diagnostics","Command too long; discarded");
+      else if (length) execute();
+      length = 0;overflow=false;
+    } else if ((unsigned char)c >= 32 && c != 127) {
+      if(length < sizeof(command)-1)command[length++]=c;
+      else overflow=true;
+    }
   }
   if (test_step < 0 || (int32_t)(lv_tick_get() - next_step) < 0)
     return;

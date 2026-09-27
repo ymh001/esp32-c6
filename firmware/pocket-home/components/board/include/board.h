@@ -20,6 +20,7 @@ extern "C" {
 #define BOARD_I2C_SCL_GPIO 7
 #define BOARD_I2C_SDA_GPIO 8
 
+#define BOARD_SD_CS_GPIO 6
 #define BOARD_LCD_CS_GPIO 15
 #define BOARD_LCD_PCLK_GPIO 0
 #define BOARD_LCD_D0_GPIO 1

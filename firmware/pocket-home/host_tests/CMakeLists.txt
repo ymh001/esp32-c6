@@ -18,3 +18,7 @@ if(EXISTS "${POCKET_IDF_PATH}/components/json/cJSON/cJSON.c")
  target_include_directories(data_test PRIVATE ../main "${POCKET_IDF_PATH}/components/json/cJSON")
  target_compile_options(data_test PRIVATE -UNDEBUG -Wall -Wextra)
 endif()
+
+add_executable(sd_files_test sd_files_test.cpp ../components/board/sd_files.cpp)
+target_include_directories(sd_files_test PRIVATE ../components/board/include)
+target_compile_options(sd_files_test PRIVATE -UNDEBUG -Wall -Wextra)

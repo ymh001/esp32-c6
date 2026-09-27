@@ -19,4 +19,4 @@ with Path(a.log).open('wb') as f:
 s.close()
 text=Path(a.log).read_text(errors='replace')
 for line in text.splitlines():
- if any(x in line for x in ['diagnostics','pocket-home','health','network:','Time synchronized','Error','ERROR','assert','abort','Guru','rst:','Touch','touch','Panel','I2C']):print(line)
+ if any(x in line for x in ['diagnostics','pocket-home','health','network:','Time synchronized','Error','ERROR','assert','abort','Guru','rst:','Touch','touch','Panel','I2C','sdcard','DMA timeout']):print(line)

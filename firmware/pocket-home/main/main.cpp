@@ -3,11 +3,14 @@
 #include "core/services.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_pm.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "ui/port.h"
 #include "ui/shell.h"
 extern "C" void app_main() {
+  const esp_pm_config_t pm{.max_freq_mhz=160,.min_freq_mhz=40,.light_sleep_enable=false};
+  ESP_ERROR_CHECK(esp_pm_configure(&pm));
   pocket::diagnostics_init();
   ESP_ERROR_CHECK(board_init());
   pocket::services_init();
@@ -16,7 +19,7 @@ extern "C" void app_main() {
   bool held = false;
   uint32_t heartbeat = 0;
   ESP_LOGI("pocket-home",
-           "v0.2.2 ready: desktop, clock, energy, control center, Wi-Fi");
+           "v0.2.3 ready (SD read/write): desktop, clock, energy, control center, Wi-Fi");
   for (;;) {
     bool key = board_key_pressed();
     if (key && !held)

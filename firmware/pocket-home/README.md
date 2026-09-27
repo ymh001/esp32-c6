@@ -1,6 +1,6 @@
 # Pocket Home
 
-这是本仓库的**新版独立固件**，当前版本 **v0.2.2**。旧版多页面时钟固件见 [Desk Clock](../desk-clock/README.md)，其源码单独保留。两者并非功能完全相同的版本升级。
+这是本仓库的**新版独立固件**，当前版本 **v0.2.3**。旧版多页面时钟固件见 [Desk Clock](../desk-clock/README.md)，其源码单独保留。两者并非功能完全相同的版本升级。
 
 Waveshare ESP32-C6-Touch-AMOLED-2.16 的独立固件。480×480 AMOLED，ESP-IDF 5.5.2、LVGL 9.6.0~1。
 
@@ -21,7 +21,7 @@ Waveshare ESP32-C6-Touch-AMOLED-2.16 的独立固件。480×480 AMOLED，ESP-IDF
 ```bash
 source /Users/yemenghao/projects/esp/activate-esp-idf-v5.5.2.sh
 idf.py build
-python tools/export_release.py 0.2.2
+python tools/export_release.py 0.2.3
 ```
 
 `build/` 保存临时产物。烧录包导出到仓库的 `releases/pocket-home/v<版本>/`，带合并镜像、说明和 SHA-256；已有版本不覆盖。
@@ -52,7 +52,7 @@ UI 只在主任务调用 LVGL。Wi-Fi 在独立任务扫描/连接，通过命�
 ```bash
 cmake -S host_tests -B build-host -DCMAKE_BUILD_TYPE=Debug
 cmake --build build-host -j8
-(cd build-host && ./data_test && ./ui_test)
+(cd build-host && ./data_test && ./sd_files_test && ./ui_test)
 ```
 
 测试使用 64 KiB LVGL 内存池，覆盖触摸导航、手势、虚拟键盘、连接提交、Wi-Fi 开关、熄屏唤醒和多次页面生命周期。
@@ -89,3 +89,43 @@ USB 串口诊断（115200，换行结尾）：`status`、`home`、`clock`、`ene
 ## v0.2.2
 
 补上电池图标和电量百分比，覆盖桌面、应用和系统覆盖页。复用现有 AXP2101 电压及充电完成状态估算，每 5 秒采样；不高于 20% 时图标变红。没有电池或读取失败时显示 `--%`，不把失败当作零电量。百分比是现有电压曲线的估计值，并非精密电量计读数。
+
+
+## v0.2.3：SD 卡读写
+
+**验证状态：代码和主机文件测试通过，当前插入的实卡初始化仍失败，尚未完成实卡写入/回读验证。**
+排查记录见 `releases/pocket-home/v0.2.3/VALIDATION.md`（仓库根目录下）。
+
+卡槽使用 SPI2，与 AMOLED 共用 GPIO0/1/2，SD CS 为 GPIO6，LCD CS 为 GPIO15。
+先将两个片选置高、初始化一次总线，挂载 SD 使其进入 SPI 模式，再初始化屏幕。
+普通数据传输由 ESP-IDF 的 SPI 总线仲裁串行执行；挂载/卸载先排空 LCD DMA。
+SD 时钟先用 1 MHz，LCD 仍为 40 MHz QSPI。保留设备现有 40–160 MHz CPU 动态调频，
+并将其加入默认构建配置，避免干净构建退回固定频率。
+
+- 挂载点 `/sdcard`，支持 FAT16/FAT32、UTF-8 长文件名。
+- 缺卡、文件系统不支持或挂载失败时仍启动界面；**不会格式化**。
+- ESP-IDF 5.5.2 自带 FatFs 未启用 exFAT；本版不支持 exFAT/NTFS。
+- 当前提供固件文件接口及串口诊断，没有新增文件管理器界面，也不是 USB 读卡器。
+- 建议关机插拔卡。没有卡检测引脚，不支持无条件热插拔；通电插入尚未进入 SPI 模式
+  的卡可能干扰屏幕总线。卸载不关闭卡电源。
+
+USB 串口（115200，命令以换行结束）：
+
+| 命令 | 用途 |
+| --- | --- |
+| `sd-status` | 挂载状态、卡容量、文件系统总量/剩余空间 |
+| `sd-ls` | 列出根目录，最多 64 项 |
+| `sd-read 路径` | 读取文件前 512 字节，以十六进制和 ASCII 输出 |
+| `sd-write 新路径 文本` | 新建文件并落盘；已有同名文件时拒绝覆盖，路径不含空格 |
+| `sd-test` | 随机文件写入 8 KB，关闭重开逐字节校验，成功后删除测试文件 |
+| `sd-unmount` | 关闭挂载，不释放屏幕共用的 SPI 总线 |
+| `sd-mount` | 在主任务暂停 LCD 提交期间重新挂载 |
+
+路径相对 `/sdcard`，可读子目录文件；拒绝绝对路径、上级路径和 FAT 路径别名。
+串口整行最多 383 字节，超长整行丢弃，避免执行被截断的写入命令。
+自检使用独占创建，遇到同名文件换名，失败时保留自检文件便于排查。
+
+文件接口位于 `components/board/include/board_sd.h`，由 UI/main 任务调用；
+不要从其他任务并发调用挂载、卸载或 LCD 操作。
+纯文件 IO 与路径测试位于 `host_tests/sd_files_test.cpp`。
+共享总线初始化顺序参考 ESP-IDF 本地文档 `docs/en/api-reference/peripherals/sdspi_share.rst`。

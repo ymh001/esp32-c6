@@ -1,6 +1,9 @@
 #include "board.h"
 
 #include "board_internal.h"
+#include "board_sd.h"
+#include "driver/gpio.h"
+#include <initializer_list>
 #include "driver/spi_master.h"
 #include "esp_check.h"
 #include "esp_lcd_sh8601.h"
@@ -33,6 +36,11 @@ esp_err_t board_display_init(board_display_t *display)
         return ESP_ERR_INVALID_ARG;
     }
 
+    // Keep both slaves deselected before the shared bus emits any clocks.
+    for(int cs : {BOARD_LCD_CS_GPIO, BOARD_SD_CS_GPIO}) {
+        ESP_RETURN_ON_ERROR(gpio_set_level((gpio_num_t)cs,1),TAG,"CS level");
+        ESP_RETURN_ON_ERROR(gpio_set_direction((gpio_num_t)cs,GPIO_MODE_OUTPUT),TAG,"CS output");
+    }
     spi_bus_config_t bus_config = {};
     bus_config.data0_io_num = BOARD_LCD_D0_GPIO;
     bus_config.data1_io_num = BOARD_LCD_D1_GPIO;
@@ -44,6 +52,16 @@ esp_err_t board_display_init(board_display_t *display)
     ESP_RETURN_ON_ERROR(
         spi_bus_initialize(SPI2_HOST, &bus_config, SPI_DMA_CH_AUTO), TAG,
         "SPI init failed");
+
+    const esp_err_t reset_error = board_display_reset();
+    if (reset_error != ESP_OK) {
+        ESP_LOGW(TAG, "Panel power reset failed: %s",
+                 esp_err_to_name(reset_error));
+    }
+
+    // SD must enter SPI mode before LCD traffic; missing/unformatted cards
+    // must not prevent the clock from booting, and must never be formatted.
+    board_sd_mount();
 
     esp_lcd_panel_io_spi_config_t io_config = {};
     io_config.cs_gpio_num = BOARD_LCD_CS_GPIO;
@@ -74,11 +92,6 @@ esp_err_t board_display_init(board_display_t *display)
         esp_lcd_new_panel_sh8601(display->panel_io, &panel_config,
                                  &display->panel),
         TAG, "Panel init failed");
-    const esp_err_t reset_error = board_display_reset();
-    if (reset_error != ESP_OK) {
-        ESP_LOGW(TAG, "Panel power reset failed: %s",
-                 esp_err_to_name(reset_error));
-    }
     ESP_RETURN_ON_ERROR(esp_lcd_panel_init(display->panel), TAG,
                         "Panel controller init failed");
     ESP_RETURN_ON_ERROR(esp_lcd_panel_disp_on_off(display->panel, true), TAG,

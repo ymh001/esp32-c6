@@ -7,7 +7,7 @@ Waveshare **ESP32-C6-Touch-AMOLED-2.16** 的两个独立固件项目。它们使
 | 项目 | 定位 | 主要功能与交互 | 源码 / 构建说明 |
 | --- | --- | --- | --- |
 | **Desk Clock（旧版）** | 原有多页面桌面时钟固件，单独保留 | 时钟、农历/月历、用电等页面，左右滑动切页；另有设备控制和语音相关实现 | [firmware/desk-clock](firmware/desk-clock/README.md) |
-| **Pocket Home（新版）** | 手机应用桌面风格的重写固件，当前设备使用 v0.2.2 | 桌面图标、翻页时钟、Grafana 家庭耗电、下拉控制中心、触屏 Wi-Fi 配网、自动旋转/锁定、电池电量；不使用左右滑动切换应用 | [firmware/pocket-home](firmware/pocket-home/README.md) |
+| **Pocket Home（新版）** | 手机应用桌面风格的重写固件，v0.2.3 增加 SD 文件接口（当前实卡验证未通过） | 桌面图标、翻页时钟、Grafana 家庭耗电、下拉控制中心、触屏 Wi-Fi 配网、自动旋转/锁定、电池电量；不使用左右滑动切换应用 | [firmware/pocket-home](firmware/pocket-home/README.md) |
 
 Pocket Home 尚未迁移 Desk Clock 的所有功能；两者不是同一固件的新旧目录副本。新增功能和修复应在对应项目内进行。
 
