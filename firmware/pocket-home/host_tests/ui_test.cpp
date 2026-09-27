@@ -190,19 +190,21 @@ int main() {
   swipe(220, 60, 0, 140);
   page("control");
   snap("control");
-  tap(402,394);step(1100);assert(transfer.enabled);
+  swipe(280, 391, 0, -150);page("control");
+  tap(402,370);step(1100);assert(transfer.enabled);
   assert(has_text(lv_screen_active(),"123456"));
   snap("control-transfer");
-  tap(110,393);assert(transfer.enabled); // Label must not toggle the switch.
-  tap(402,394);step(1100);assert(!transfer.enabled);
+  tap(110,370);assert(transfer.enabled); // Label must not toggle the switch.
+  tap(402,370);step(1100);assert(!transfer.enabled);
+  swipe(280, 160, 0, 150);page("control");
 
-  tap(345, 322);
+  tap(345, 355);
   assert(preferences().rotation_locked);
   assert(has_text(lv_screen_active(), "已锁定"));
   snap("control-locked");
-  tap(345, 322);
+  tap(345, 355);
   assert(!preferences().rotation_locked);
-  swipe(12, 390, 0, -170);
+  swipe(12, 462, 0, -170);
   page("clock");
   swipe(240, 455, 0, -95);
   page("home");
@@ -253,7 +255,7 @@ int main() {
   assert(!net.enabled);
   tap(180, 135);
   assert(net.enabled);
-  tap(200, 322);
+  tap(200, 355);
   page("timeout");
   tap(200, 113);
   page("control");

@@ -164,27 +164,35 @@ void overlay_base(Overlay kind, const char *title, Action back) {
 void toggle_wifi(lv_event_t *) { network_enable(!network_snapshot().enabled); }
 void build_control() {
   overlay_base(Overlay::Control, "控制中心", Action::Close);
-  auto tile = button(overlay, "", 24, 91, 278, 101, toggle_wifi, nullptr, CARD);
-  auto symbol = text(tile, LV_SYMBOL_WIFI, 20, 10, &lv_font_montserrat_32);
+  auto cards = box(overlay, 0, 88, 480, 352, 0x101622);
+  lv_obj_set_scrollable(cards, true);
+  lv_obj_set_clickable(cards, true);
+  lv_obj_set_scroll_dir(cards, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(cards, LV_SCROLLBAR_MODE_AUTO);
+  lv_obj_set_gesture_bubble(cards, false);
+  lv_obj_set_scroll_elastic(cards, false);
+  lv_obj_set_scroll_momentum(cards, false);
+  auto tile = button(cards, "", 24, 0, 276, 100, toggle_wifi, nullptr, CARD);
+  auto symbol = text(tile, LV_SYMBOL_WIFI, 20, 9, &lv_font_montserrat_32);
   (void)symbol;
-  wifi_title = text(tile, "Wi-Fi", 20, 46);
+  wifi_title = text(tile, "Wi-Fi", 20, 44);
   lv_obj_set_width(wifi_title, 234);
   lv_label_set_long_mode(wifi_title, LV_LABEL_LONG_DOT);
-  wifi_detail = text(tile, "", 20, 76, &clock_cjk_16);
+  wifi_detail = text(tile, "", 20, 72, &clock_cjk_16);
   lv_obj_set_width(wifi_detail, 234);
   lv_label_set_long_mode(wifi_detail, LV_LABEL_LONG_DOT);
   wifi_switch = tile;
   auto settings =
-      nav_button(overlay, "", 316, 91, 140, 101, Action::Wifi, CARD);
+      nav_button(cards, "", 316, 0, 140, 100, Action::Wifi, CARD);
   auto a = text(settings, LV_SYMBOL_SETTINGS, 0, 10, &lv_font_montserrat_32);
   center_text(a, 140);
   a = text(settings, "选网络", 0, 58);
   center_text(a, 140);
-  auto bright = box(overlay, 24, 204, 432, 77, CARD, 24);
-  text(bright, "亮度", 20, 12);
-  brightness_value = text(bright, "", 340, 16, &clock_cjk_16, MUTED);
+  auto bright = box(cards, 24, 112, 432, 100, CARD, 18);
+  text(bright, "亮度", 20, 16);
+  brightness_value = text(bright, "", 340, 20, &clock_cjk_16, MUTED);
   auto slider = lv_slider_create(bright);
-  lv_obj_set_pos(slider, 24, 48);
+  lv_obj_set_pos(slider, 24, 64);
   lv_obj_set_size(slider, 384, 16);
   lv_slider_set_range(slider, 5, 100);
   lv_slider_set_value(slider, preferences().brightness, LV_ANIM_OFF);
@@ -208,16 +216,16 @@ void build_control() {
   char s[16];
   snprintf(s, sizeof(s), "%u%%", preferences().brightness);
   text_update(brightness_value, s);
-  auto timeout = nav_button(overlay, "", 24, 293, 208, 62, Action::Timeout);
-  text(timeout, "亮屏时长", 18, 10, &clock_cjk_16);
+  auto timeout = nav_button(cards, "", 24, 224, 210, 100, Action::Timeout);
+  text(timeout, "亮屏时长", 20, 20, &clock_cjk_16);
   uint16_t seconds = preferences().timeout_seconds;
   if (seconds)
     snprintf(s, sizeof(s), "%u 秒  >", seconds);
   else
     snprintf(s, sizeof(s), "常亮  >");
-  text(timeout, s, 18, 35, &clock_cjk_16, MUTED);
+  text(timeout, s, 20, 60, &clock_cjk_16, MUTED);
   auto rotate = button(
-      overlay, "", 248, 293, 208, 62,
+      cards, "", 246, 224, 210, 100,
       [](lv_event_t *) {
         auto p = preferences();
         p.rotation_locked = !p.rotation_locked;
@@ -227,16 +235,16 @@ void build_control() {
         request(Action::Control);
       },
       nullptr, preferences().rotation_locked ? 0x325AAF : CARD);
-  text(rotate, "旋转锁定", 18, 10, &clock_cjk_16);
-  text(rotate, preferences().rotation_locked ? "已锁定" : "自动旋转", 18, 35,
+  text(rotate, "旋转锁定", 20, 20, &clock_cjk_16);
+  text(rotate, preferences().rotation_locked ? "已锁定" : "自动旋转", 20, 60,
        &clock_cjk_16, preferences().rotation_locked ? 0xD7E7FF : MUTED);
-  auto transfer=box(overlay,24,367,432,73,CARD,18);
-  transfer_title=text(transfer,"文件传输",18,14,&clock_cjk_16);
-  transfer_detail=text(transfer,"",18,45,&clock_cjk_16,MUTED);
+  auto transfer=box(cards,24,336,432,100,CARD,18);
+  transfer_title=text(transfer,"文件传输",20,16,&clock_cjk_16);
+  transfer_detail=text(transfer,"",20,46,&clock_cjk_16,MUTED);
   lv_obj_set_width(transfer_detail,396);
   lv_label_set_long_mode(transfer_detail,LV_LABEL_LONG_DOT);
   transfer_switch=lv_switch_create(transfer);
-  lv_obj_set_pos(transfer_switch,346,10);lv_obj_set_size(transfer_switch,66,32);
+  lv_obj_set_pos(transfer_switch,346,16);lv_obj_set_size(transfer_switch,66,32);
   lv_obj_set_style_bg_color(transfer_switch,lv_color_hex(GREEN),LV_PART_INDICATOR|LV_STATE_CHECKED);
   lv_obj_set_gesture_bubble(transfer_switch,false);
   if(transfer_enabled())lv_obj_add_state(transfer_switch,LV_STATE_CHECKED);
@@ -246,7 +254,11 @@ void build_control() {
     if(!transfer_enable(on))lv_obj_remove_state(target,LV_STATE_CHECKED);
     last_second=UINT32_MAX;
   },LV_EVENT_VALUE_CHANGED,nullptr);
-  auto hint = text(overlay, "上滑收起", 0, 445, &clock_cjk_16, MUTED);
+  auto footer = box(overlay, 0, 440, 480, 40, 0x101622);
+  lv_obj_set_clickable(footer, true);
+  lv_obj_set_gesture_bubble(footer, false);
+  lv_obj_add_event_cb(footer, gesture, LV_EVENT_GESTURE, nullptr);
+  auto hint = text(footer, "上滑收起", 0, 5, &clock_cjk_16, MUTED);
   center_text(hint, 480);
   last_network_revision = UINT32_MAX;
 }
@@ -413,7 +425,7 @@ void update_transfer() {
   else snprintf(title,sizeof(title),"文件传输");
   const bool show_code=t.running&&n.state==NetState::Connected;
   lv_obj_set_style_text_font(transfer_detail,show_code?&lv_font_montserrat_32:&clock_cjk_16,0);
-  lv_obj_set_y(transfer_detail,show_code?34:45);
+  lv_obj_set_y(transfer_detail,show_code?48:60);
   if(show_code)snprintf(detail,sizeof(detail),"%s",t.code);
   else snprintf(detail,sizeof(detail),"%s",t.message);
   text_update(transfer_title,title);text_update(transfer_detail,detail);
@@ -438,7 +450,7 @@ void update_network() {
                                               : "Wi-Fi 已关闭");
     char detail[96];
     const bool has_ip = n.state == NetState::Connected && n.ip[0];
-    lv_obj_set_y(wifi_detail, has_ip ? 70 : 76);
+    lv_obj_set_y(wifi_detail, has_ip ? 68 : 72);
     lv_obj_set_style_text_font(wifi_detail,
                               has_ip ? &pocket_text_24 : &clock_cjk_16, 0);
     if (n.state == NetState::Connected && n.ip[0]) {
