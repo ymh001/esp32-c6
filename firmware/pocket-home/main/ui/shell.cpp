@@ -434,8 +434,12 @@ void update_network() {
                                   : n.enabled ? "Wi-Fi 已开启"
                                               : "Wi-Fi 已关闭");
     char detail[96];
+    const bool has_ip = n.state == NetState::Connected && n.ip[0];
+    lv_obj_set_y(wifi_detail, has_ip ? 70 : 76);
+    lv_obj_set_style_text_font(wifi_detail,
+                              has_ip ? &pocket_text_24 : &clock_cjk_16, 0);
     if (n.state == NetState::Connected && n.ip[0]) {
-      snprintf(detail, sizeof(detail), "IP: %s", n.ip);
+      snprintf(detail, sizeof(detail), "%s", n.ip);
     } else {
       snprintf(detail, sizeof(detail), "%s",
                n.enabled && n.message[0] ? n.message : "未连接");
