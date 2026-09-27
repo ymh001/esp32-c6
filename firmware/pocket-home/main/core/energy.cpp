@@ -1,4 +1,5 @@
 #include "energy.h"
+#include "file_transfer.h"
 #include "esp_crt_bundle.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
@@ -75,7 +76,7 @@ void worker(void *) {
     bool connected = network_snapshot().state == NetState::Connected;
     if (!connected)
       remaining = 0;
-    if (connected && clock_valid() && remaining == 0) {
+    if (connected && clock_valid() && remaining == 0 && !transfer_busy()) {
       EnergySnapshot next;
       bool ok = fetch(next);
       portENTER_CRITICAL(&lock);

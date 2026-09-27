@@ -22,3 +22,7 @@ endif()
 add_executable(sd_files_test sd_files_test.cpp ../components/board/sd_files.cpp)
 target_include_directories(sd_files_test PRIVATE ../components/board/include)
 target_compile_options(sd_files_test PRIVATE -UNDEBUG -Wall -Wextra)
+
+add_executable(transfer_files_test transfer_files_test.cpp ../main/core/transfer_files.cpp ../components/board/sd_files.cpp)
+target_include_directories(transfer_files_test PRIVATE ../main ../components/board/include)
+target_compile_options(transfer_files_test PRIVATE -UNDEBUG -Wall -Wextra)

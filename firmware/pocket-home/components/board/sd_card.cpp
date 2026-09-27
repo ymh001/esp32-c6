@@ -15,6 +15,9 @@
 static constexpr const char *TAG="sdcard";
 static constexpr const char *ROOT="/sdcard";
 static sdmmc_card_t *card;
+static bool transfer_guard;
+bool board_sd_is_mounted(){return card!=nullptr;}
+void board_sd_transfer_guard(bool active){transfer_guard=active;}
 static esp_err_t last_error=ESP_ERR_INVALID_STATE;
 // Reject invalid identification data before IDF derives a zero-sized disk.
 // No protocol checks, command errors or CRC errors are suppressed.
@@ -65,6 +68,7 @@ esp_err_t board_sd_mount() {
     board_sd_status();return ESP_OK;
 }
 esp_err_t board_sd_unmount() {
+    if(transfer_guard){ESP_LOGW(TAG,"Close file transfer before unmounting");return ESP_ERR_INVALID_STATE;}
     if(!card)return ESP_OK;
     esp_err_t err=drain_lcd();if(err!=ESP_OK)return last_error=err;
     // IDF frees the card before unregistering VFS, which can itself fail.
@@ -99,13 +103,16 @@ void board_sd_list() {
     closedir(dir);ESP_LOGI(TAG,"Directory listing complete");
 }
 int board_sd_read(const char *relative,void *data,size_t capacity,size_t *size) {
+    if(transfer_guard){if(size)*size=0;return EBUSY;}
     if(!card){if(size)*size=0;return ENODEV;}
     return sd_files::read(ROOT,relative,data,capacity,size);
 }
 int board_sd_write_new(const char *relative,const void *data,size_t size) {
+    if(transfer_guard)return EBUSY;
     return card?sd_files::write_new(ROOT,relative,data,size):ENODEV;
 }
 void board_sd_self_test() {
+    if(transfer_guard){ESP_LOGW(TAG,"Close file transfer before running SD self-test");return;}
     if(!card){board_sd_status();return;}
     char name[16];int err=sd_files::self_test(ROOT,esp_random(),name,sizeof(name));
     if(err)ESP_LOGE(TAG,"SELFTEST FAIL file=%s error=%s",name,strerror(err));

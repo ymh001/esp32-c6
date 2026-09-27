@@ -19,7 +19,7 @@ extern "C" void app_main() {
   bool held = false;
   uint32_t heartbeat = 0;
   ESP_LOGI("pocket-home",
-           "v0.2.3 ready (SD read/write): desktop, clock, energy, control center, Wi-Fi");
+           "v0.2.4 ready (Wi-Fi file transfer): desktop, clock, energy, control center, Wi-Fi");
   for (;;) {
     bool key = board_key_pressed();
     if (key && !held)

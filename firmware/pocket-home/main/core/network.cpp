@@ -9,6 +9,7 @@
 #include "freertos/task.h"
 #include "nvs.h"
 #include "services.h"
+#include "file_transfer.h"
 #include <cstdio>
 #include <cstring>
 #if __has_include("../../config.local.h")
@@ -356,10 +357,11 @@ NetworkSnapshot network_snapshot() {
   portEXIT_CRITICAL(&lock);
   return copy;
 }
-bool network_enable(bool on) { return send({on ? Op::Enable : Op::Disable}); }
+bool network_enable(bool on) { if(!on && transfer_enabled())return false; return send({on ? Op::Enable : Op::Disable}); }
 bool network_scan() { return send({Op::Scan}); }
-bool network_forget() { return send({Op::Forget}); }
+bool network_forget() { if(transfer_enabled())return false; return send({Op::Forget}); }
 bool network_connect(const char *ssid, const char *password) {
+  if(transfer_enabled())return false;
   if (!ssid || !password || !ssid[0] || strlen(ssid) > 32 ||
       strlen(password) > 63 || (password[0] && strlen(password) < 8))
     return false;

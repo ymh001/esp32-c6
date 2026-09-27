@@ -1,4 +1,5 @@
 #include "services.h"
+#include "file_transfer.h"
 #include "board.h"
 #include "energy.h"
 #include "esp_log.h"
@@ -67,6 +68,7 @@ bool clock_valid() {
 }
 bool clock_synced() { return synced; }
 void services_process() {
+  transfer_process();
   if (esp_timer_get_time() >= battery_next) {
     battery_next = esp_timer_get_time() + 5000000;
     battery.valid = board_power_get_battery(&battery.percent, &battery.voltage_mv) == ESP_OK;

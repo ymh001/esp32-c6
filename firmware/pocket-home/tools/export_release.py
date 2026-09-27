@@ -24,7 +24,7 @@ with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
 目标板：Waveshare ESP32-C6-Touch-AMOLED-2.16，16 MB Flash，480×480。
 ESP-IDF 5.5.2，LVGL 9.6.0~1。镜像起始地址：`0x0`。
 
-功能：应用桌面、翻页时钟、Grafana 家庭耗电、自动旋转与旋转锁定、控制中心、触屏 Wi-Fi 配网、SD 卡 FAT 文件读写。
+功能：应用桌面、翻页时钟、Grafana 家庭耗电、自动旋转与旋转锁定、控制中心、触屏 Wi-Fi 配网、SD 卡 FAT 文件读写、Wi-Fi 网页文件传输。
 {'本包含本地网络配置，仅供本人设备使用，不提交或上传。' if private else '无预置私有网络凭据，可在设备端配网。'}
 
 ## 烧录

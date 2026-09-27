@@ -11,3 +11,6 @@ void board_sd_list();
 int board_sd_read(const char *relative,void *data,size_t capacity,size_t *size);
 int board_sd_write_new(const char *relative,const void *data,size_t size);
 void board_sd_self_test();
+
+bool board_sd_is_mounted();
+void board_sd_transfer_guard(bool active);

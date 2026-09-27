@@ -1,6 +1,7 @@
 #include "shell.h"
 #include "../apps/apps.h"
 #include "../core/services.h"
+#include "../core/file_transfer.h"
 #include "widgets.h"
 #include <cstdint>
 #include <cstdio>
@@ -21,6 +22,7 @@ enum class Action {
 lv_obj_t *screen, *scene, *overlay, *shield, *status_time, *status_net,
     *wifi_title, *wifi_detail, *wifi_message, *wifi_list, *wifi_switch,
     *brightness_value, *password_input, *password_message, *keyboard;
+lv_obj_t *transfer_switch, *transfer_title, *transfer_detail;
 lv_obj_t *battery_value, *battery_icon, *overlay_battery_value, *overlay_battery_icon;
 const App *active_app = nullptr;
 Overlay mode = Overlay::None;
@@ -55,6 +57,7 @@ void dismiss_overlay() {
     overlay = nullptr;
   }
   overlay_battery_value = overlay_battery_icon = nullptr;
+  transfer_switch=transfer_title=transfer_detail=nullptr;
   mode = Overlay::None;
   wifi_title = wifi_detail = wifi_message = wifi_list = wifi_switch =
       password_input = password_message = keyboard = brightness_value = nullptr;
@@ -161,28 +164,28 @@ void overlay_base(Overlay kind, const char *title, Action back) {
 void toggle_wifi(lv_event_t *) { network_enable(!network_snapshot().enabled); }
 void build_control() {
   overlay_base(Overlay::Control, "控制中心", Action::Close);
-  auto tile = button(overlay, "", 24, 91, 278, 123, toggle_wifi, nullptr, CARD);
-  auto symbol = text(tile, LV_SYMBOL_WIFI, 20, 18, &lv_font_montserrat_32);
+  auto tile = button(overlay, "", 24, 91, 278, 101, toggle_wifi, nullptr, CARD);
+  auto symbol = text(tile, LV_SYMBOL_WIFI, 20, 10, &lv_font_montserrat_32);
   (void)symbol;
-  wifi_title = text(tile, "Wi-Fi", 20, 60);
+  wifi_title = text(tile, "Wi-Fi", 20, 46);
   lv_obj_set_width(wifi_title, 234);
   lv_label_set_long_mode(wifi_title, LV_LABEL_LONG_DOT);
-  wifi_detail = text(tile, "", 20, 94, &clock_cjk_16);
+  wifi_detail = text(tile, "", 20, 76, &clock_cjk_16);
   lv_obj_set_width(wifi_detail, 234);
   lv_label_set_long_mode(wifi_detail, LV_LABEL_LONG_DOT);
   wifi_switch = tile;
   auto settings =
-      nav_button(overlay, "", 316, 91, 140, 123, Action::Wifi, CARD);
-  auto a = text(settings, LV_SYMBOL_SETTINGS, 0, 18, &lv_font_montserrat_32);
+      nav_button(overlay, "", 316, 91, 140, 101, Action::Wifi, CARD);
+  auto a = text(settings, LV_SYMBOL_SETTINGS, 0, 10, &lv_font_montserrat_32);
   center_text(a, 140);
-  a = text(settings, "选网络", 0, 72);
+  a = text(settings, "选网络", 0, 58);
   center_text(a, 140);
-  auto bright = box(overlay, 24, 230, 432, 110, CARD, 24);
+  auto bright = box(overlay, 24, 204, 432, 77, CARD, 24);
   text(bright, "亮度", 20, 12);
   brightness_value = text(bright, "", 340, 16, &clock_cjk_16, MUTED);
   auto slider = lv_slider_create(bright);
-  lv_obj_set_pos(slider, 24, 63);
-  lv_obj_set_size(slider, 384, 24);
+  lv_obj_set_pos(slider, 24, 48);
+  lv_obj_set_size(slider, 384, 16);
   lv_slider_set_range(slider, 5, 100);
   lv_slider_set_value(slider, preferences().brightness, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(slider, lv_color_hex(0x39445A), LV_PART_MAIN);
@@ -205,16 +208,16 @@ void build_control() {
   char s[16];
   snprintf(s, sizeof(s), "%u%%", preferences().brightness);
   text_update(brightness_value, s);
-  auto timeout = nav_button(overlay, "", 24, 356, 208, 72, Action::Timeout);
+  auto timeout = nav_button(overlay, "", 24, 293, 208, 62, Action::Timeout);
   text(timeout, "亮屏时长", 18, 10, &clock_cjk_16);
   uint16_t seconds = preferences().timeout_seconds;
   if (seconds)
     snprintf(s, sizeof(s), "%u 秒  >", seconds);
   else
     snprintf(s, sizeof(s), "常亮  >");
-  text(timeout, s, 18, 41, &clock_cjk_16, MUTED);
+  text(timeout, s, 18, 35, &clock_cjk_16, MUTED);
   auto rotate = button(
-      overlay, "", 248, 356, 208, 72,
+      overlay, "", 248, 293, 208, 62,
       [](lv_event_t *) {
         auto p = preferences();
         p.rotation_locked = !p.rotation_locked;
@@ -225,8 +228,24 @@ void build_control() {
       },
       nullptr, preferences().rotation_locked ? 0x325AAF : CARD);
   text(rotate, "旋转锁定", 18, 10, &clock_cjk_16);
-  text(rotate, preferences().rotation_locked ? "已锁定" : "自动旋转", 18, 41,
+  text(rotate, preferences().rotation_locked ? "已锁定" : "自动旋转", 18, 35,
        &clock_cjk_16, preferences().rotation_locked ? 0xD7E7FF : MUTED);
+  auto transfer=box(overlay,24,367,432,73,CARD,18);
+  transfer_title=text(transfer,"文件传输",18,14,&clock_cjk_16);
+  transfer_detail=text(transfer,"",18,45,&clock_cjk_16,MUTED);
+  lv_obj_set_width(transfer_detail,396);
+  lv_label_set_long_mode(transfer_detail,LV_LABEL_LONG_DOT);
+  transfer_switch=lv_switch_create(transfer);
+  lv_obj_set_pos(transfer_switch,346,10);lv_obj_set_size(transfer_switch,66,32);
+  lv_obj_set_style_bg_color(transfer_switch,lv_color_hex(GREEN),LV_PART_INDICATOR|LV_STATE_CHECKED);
+  lv_obj_set_gesture_bubble(transfer_switch,false);
+  if(transfer_enabled())lv_obj_add_state(transfer_switch,LV_STATE_CHECKED);
+  lv_obj_add_event_cb(transfer_switch,[](lv_event_t *e){
+    auto target=(lv_obj_t *)lv_event_get_target(e);
+    bool on=lv_obj_has_state(target,LV_STATE_CHECKED);
+    if(!transfer_enable(on))lv_obj_remove_state(target,LV_STATE_CHECKED);
+    last_second=UINT32_MAX;
+  },LV_EVENT_VALUE_CHANGED,nullptr);
   auto hint = text(overlay, "上滑收起", 0, 445, &clock_cjk_16, MUTED);
   center_text(hint, 480);
   last_network_revision = UINT32_MAX;
@@ -382,6 +401,21 @@ void build_password() {
       overlay, "连接", 24, 214, 432, 44,
       [](lv_event_t *) { submit_password(); }, nullptr, BLUE);
 }
+void update_transfer() {
+  if(mode!=Overlay::Control||!transfer_switch)return;
+  auto t=transfer_snapshot();auto n=network_snapshot();
+  if(t.enabled)lv_obj_add_state(transfer_switch,LV_STATE_CHECKED);
+  else lv_obj_remove_state(transfer_switch,LV_STATE_CHECKED);
+  if(t.stopping)lv_obj_add_state(transfer_switch,LV_STATE_DISABLED);
+  else lv_obj_remove_state(transfer_switch,LV_STATE_DISABLED);
+  char title[64],detail[128];
+  if(t.busy)snprintf(title,sizeof(title),"文件传输 %u%%",t.progress);
+  else snprintf(title,sizeof(title),"文件传输");
+  if(t.running&&n.state==NetState::Connected)snprintf(detail,sizeof(detail),"http://%s · 码 %s",n.ip,t.code);
+  else snprintf(detail,sizeof(detail),"%s",t.message);
+  text_update(transfer_title,title);text_update(transfer_detail,detail);
+  lv_obj_set_style_text_color(transfer_detail,lv_color_hex(t.running?GREEN:MUTED),0);
+}
 void update_network() {
   auto n = network_snapshot();
   lv_obj_set_style_text_color(
@@ -469,6 +503,7 @@ void timer(lv_timer_t *) {
     if (active_app && active_app->tick && mode == Overlay::None && !asleep)
       active_app->tick();
     update_network();
+    update_transfer();
   }
   auto p = preferences();
   if (!asleep && p.timeout_seconds &&

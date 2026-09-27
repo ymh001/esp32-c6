@@ -2,6 +2,7 @@
 #include "../ui/shell.h"
 #include "board.h"
 #include "board_sd.h"
+#include "file_transfer.h"
 #include "driver/usb_serial_jtag.h"
 #include "driver/usb_serial_jtag_vfs.h"
 #include "energy.h"
@@ -43,6 +44,14 @@ void status() {
            (unsigned)m.free_size);
 }
 void execute() {
+  if(!strcmp(command,"transfer-on") || !strcmp(command,"transfer-off") || !strcmp(command,"transfer-status")) {
+    if(!strcmp(command,"transfer-on"))transfer_enable(true);
+    if(!strcmp(command,"transfer-off"))transfer_enable(false);
+    auto t=transfer_snapshot();auto n=network_snapshot();
+    ESP_LOGI("transfer","enabled=%d running=%d busy=%d url=http://%s/ code=%s",t.enabled,t.running,t.busy,n.ip,t.enabled?t.code:"--------");
+    return;
+  }
+
   if(!strncmp(command,"sd-",3)) {
     if(!strcmp(command,"sd-status")) board_sd_status();
     else if(!strcmp(command,"sd-ls")) board_sd_list();

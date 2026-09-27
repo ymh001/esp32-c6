@@ -1,4 +1,5 @@
 #include "core/services.h"
+#include "core/file_transfer.h"
 #include "core/energy.h"
 #include "ui/shell.h"
 #include "ui/widgets.h"
@@ -17,6 +18,12 @@ static int hour = 12, minute = 34;
 static unsigned connections, scans;
 namespace pocket {
 static Preferences prefs;
+static TransferSnapshot transfer;
+bool transfer_enabled(){return transfer.enabled;}
+bool transfer_busy(){return transfer.busy;}
+TransferSnapshot transfer_snapshot(){return transfer;}
+bool transfer_enable(bool enabled){transfer.enabled=transfer.running=enabled;strcpy(transfer.code,"12345678");return true;}
+
 BatterySnapshot battery_snapshot() { return {true, 85, 4050}; }
 static EnergySnapshot energy;
 EnergySnapshot energy_snapshot() { return energy; }
@@ -183,11 +190,17 @@ int main() {
   swipe(220, 60, 0, 140);
   page("control");
   snap("control");
-  tap(345, 392);
+  tap(402,394);step(1100);assert(transfer.enabled);
+  assert(has_text(lv_screen_active(),"http://192.168.3.129 · 码 12345678"));
+  snap("control-transfer");
+  tap(110,393);assert(transfer.enabled); // Label must not toggle the switch.
+  tap(402,394);step(1100);assert(!transfer.enabled);
+
+  tap(345, 322);
   assert(preferences().rotation_locked);
   assert(has_text(lv_screen_active(), "已锁定"));
   snap("control-locked");
-  tap(345, 392);
+  tap(345, 322);
   assert(!preferences().rotation_locked);
   swipe(12, 390, 0, -170);
   page("clock");
@@ -240,7 +253,7 @@ int main() {
   assert(!net.enabled);
   tap(180, 135);
   assert(net.enabled);
-  tap(200, 387);
+  tap(200, 322);
   page("timeout");
   tap(200, 113);
   page("control");
@@ -285,7 +298,7 @@ int main() {
     lv_display_rotate_area(d, &point);
     tap(point.x1, point.y1); page("clock");
     ui_control(); step();
-    point = {345,392,345,392}; lv_display_rotate_area(d, &point);
+    point = {345,322,345,322}; lv_display_rotate_area(d, &point);
     tap(point.x1, point.y1);
     assert(preferences().rotation_locked);
     assert(preferences().locked_rotation == r);
